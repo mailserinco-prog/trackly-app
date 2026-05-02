@@ -1,0 +1,6 @@
+{
+  "name": "Equilibrium Finance",
+  "description": "A professional financial management dashboard for tracking income, expenses, and monthly statistics with a clean, high-fidelity interface.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}
