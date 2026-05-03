@@ -6,8 +6,6 @@
 import React from "react";
 import { motion } from "motion/react";
 import jsPDF from "jspdf";
-import TracklyLogo from "./assets/logo-1.png";
-import TracklyLogoHorizontal from "./assets/logo-horizontal.png";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -145,7 +143,7 @@ const ScreenHeader = ({
               <ChevronLeft size={24} strokeWidth={2.5} />
             </button>
           )}
-          <img src={TracklyLogo} alt="Trackly" className="h-9 w-auto object-contain" />
+          <img src="/logo-1.png" alt="Trackly" className="h-8 w-auto object-contain" />
         </div>
         <h1 className="text-xl font-bold tracking-tight">{title}</h1>
         <div>
@@ -228,7 +226,7 @@ const OnboardingScreen = ({ onNext }: { onNext: () => void }) => (
     <motion.img 
       initial={{ scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      src={TracklyLogo}
+      src="/logo-1.png"
       alt="Trackly"
       className="h-9 w-auto mb-10 object-contain mx-auto"
     />
@@ -1019,7 +1017,7 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
         // We use the imported Logo as a static asset. 
         // Note: For production use with jsPDF, pre-loading as base64 is often better, 
         // but often the path works if handled correctly by Vite's build.
-        doc.addImage(TracklyLogoHorizontal, 'PNG', 20, 15, 40, 12);
+        doc.addImage("/logo-horizontal.png", 'PNG', 20, 15, 40, 12);
       } catch (e) {
         // Fallback to text if image fails
         doc.setFont("helvetica", "bold");
@@ -1153,7 +1151,7 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col">
                 <div className="mb-2">
-                  <img src={TracklyLogo} alt="Trackly" className="h-9 w-auto object-contain" />
+                  <img src="/logo-1.png" alt="Trackly" className="h-8 w-auto object-contain" />
                 </div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">RECIBO</span>
               </div>
