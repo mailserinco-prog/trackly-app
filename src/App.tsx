@@ -6,6 +6,8 @@
 import React from "react";
 import { motion } from "motion/react";
 import jsPDF from "jspdf";
+import logoSquare from "./assets/logo-1.png";
+import logoHorizontal from "./assets/logo-horizontal.png";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -133,39 +135,24 @@ const TracklyLogoComp = ({
   showText?: boolean,
   direction?: 'horizontal' | 'vertical'
 }) => {
-  const isDark = variant === 'dark';
   const sizeClasses = {
-    sm: 'h-6',
-    md: 'h-8',
-    lg: 'h-10'
+    sm: direction === "horizontal" ? "h-8" : "h-7",
+    md: direction === "horizontal" ? "h-10" : "h-9",
+    lg: direction === "horizontal" ? "h-14" : "h-12"
   };
 
+  const logoSrc = direction === "horizontal" && showText
+    ? logoHorizontal
+    : logoSquare;
+
   return (
-    <div className={`flex ${direction === 'vertical' ? 'flex-col justify-center' : 'items-center'} gap-2 ${className}`}>
-      <div className={`${sizeClasses[size]} aspect-square relative flex items-center justify-center`}>
-        <svg viewBox="0 0 32 32" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="tracklyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#6EB8B5" />
-              <stop offset="100%" stopColor="#4A90E2" />
-            </linearGradient>
-          </defs>
-          <rect x="4" y="4" width="24" height="24" rx="7" fill={isDark ? "currentColor" : "white"} fillOpacity={isDark ? 0.05 : 0.2} className={isDark ? "text-primary" : ""} />
-          
-          {/* Chart Bars */}
-          <rect x="9" y="17" width="3" height="6" rx="1.5" fill={isDark ? "url(#tracklyGradient)" : "white"} />
-          <rect x="14" y="13" width="3" height="10" rx="1.5" fill={isDark ? "url(#tracklyGradient)" : "white"} />
-          <rect x="19" y="9" width="3" height="14" rx="1.5" fill={isDark ? "url(#tracklyGradient)" : "white"} />
-          
-          {/* Trend Line */}
-          <path d="M9 22L14 16L19 12L24 8" stroke={isDark ? "#6EB8B5" : "white"} strokeWidth="2.5" strokeLinecap="round" />
-        </svg>
-      </div>
-      {showText && (
-        <span className={`font-bold tracking-tight ${size === 'lg' ? 'text-3xl' : size === 'md' ? 'text-xl' : 'text-base'} ${isDark ? 'text-gray-900' : 'text-white'}`}>
-          Trackly
-        </span>
-      )}
+    <div className={`flex items-center ${className}`}>
+      <img
+        src={logoSrc}
+        alt="Trackly"
+        draggable={false}
+        className={`${sizeClasses[size]} w-auto object-contain select-none`}
+      />
     </div>
   );
 };
@@ -1069,7 +1056,7 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
         // We use the imported Logo as a static asset. 
         // Note: For production use with jsPDF, pre-loading as base64 is often better, 
         // but often the path works if handled correctly by Vite's build.
-        doc.addImage("/logo-horizontal.png", 'PNG', 20, 15, 40, 12);
+        doc.addImage(logoHorizontal, 'PNG', 20, 15, 40, 12);
       } catch (e) {
         // Fallback to text if image fails
         doc.setFont("helvetica", "bold");
