@@ -118,6 +118,58 @@ const Card = ({ children, className = "" }: { children: React.ReactNode, classNa
   </div>
 );
 
+// --- Components ---
+
+const TracklyLogoComp = ({ 
+  variant = 'light', 
+  size = 'md',
+  className = "",
+  showText = true,
+  direction = 'horizontal'
+}: { 
+  variant?: 'light' | 'dark', 
+  size?: 'sm' | 'md' | 'lg',
+  className?: string,
+  showText?: boolean,
+  direction?: 'horizontal' | 'vertical'
+}) => {
+  const isDark = variant === 'dark';
+  const sizeClasses = {
+    sm: 'h-6',
+    md: 'h-8',
+    lg: 'h-10'
+  };
+
+  return (
+    <div className={`flex ${direction === 'vertical' ? 'flex-col justify-center' : 'items-center'} gap-2 ${className}`}>
+      <div className={`${sizeClasses[size]} aspect-square relative flex items-center justify-center`}>
+        <svg viewBox="0 0 32 32" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="tracklyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#6EB8B5" />
+              <stop offset="100%" stopColor="#4A90E2" />
+            </linearGradient>
+          </defs>
+          <rect x="4" y="4" width="24" height="24" rx="7" fill={isDark ? "currentColor" : "white"} fillOpacity={isDark ? 0.05 : 0.2} className={isDark ? "text-primary" : ""} />
+          
+          {/* Chart Bars */}
+          <rect x="9" y="17" width="3" height="6" rx="1.5" fill={isDark ? "url(#tracklyGradient)" : "white"} />
+          <rect x="14" y="13" width="3" height="10" rx="1.5" fill={isDark ? "url(#tracklyGradient)" : "white"} />
+          <rect x="19" y="9" width="3" height="14" rx="1.5" fill={isDark ? "url(#tracklyGradient)" : "white"} />
+          
+          {/* Trend Line */}
+          <path d="M9 22L14 16L19 12L24 8" stroke={isDark ? "#6EB8B5" : "white"} strokeWidth="2.5" strokeLinecap="round" />
+        </svg>
+      </div>
+      {showText && (
+        <span className={`font-bold tracking-tight ${size === 'lg' ? 'text-3xl' : size === 'md' ? 'text-xl' : 'text-base'} ${isDark ? 'text-gray-900' : 'text-white'}`}>
+          Trackly
+        </span>
+      )}
+    </div>
+  );
+};
+
 const ScreenHeader = ({ 
   title, 
   onBack, 
@@ -143,7 +195,7 @@ const ScreenHeader = ({
               <ChevronLeft size={24} strokeWidth={2.5} />
             </button>
           )}
-          <img src="/logo-1.png" alt="Trackly" className="h-8 w-auto object-contain" />
+          <TracklyLogoComp size="sm" />
         </div>
         <h1 className="text-xl font-bold tracking-tight">{title}</h1>
         <div>
@@ -223,13 +275,13 @@ const BottomNav = ({ currentScreen, setScreen }: { currentScreen: AppScreen, set
 
 const OnboardingScreen = ({ onNext }: { onNext: () => void }) => (
   <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center bg-background">
-    <motion.img 
+    <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      src="/logo-1.png"
-      alt="Trackly"
-      className="h-8 w-auto object-contain mb-10 mx-auto"
-    />
+      className="mb-10"
+    >
+      <TracklyLogoComp variant="dark" size="lg" direction="vertical" />
+    </motion.div>
     
     <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Bienvenido</h1>
     <p className="text-gray-500 mb-12 max-w-xs">Guarda tus datos para no perder tus cobros si cambias de móvil o reinstalas la app.</p>
@@ -1151,7 +1203,7 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col">
                 <div className="mb-2">
-                  <img src="/logo-1.png" alt="Trackly" className="h-8 w-auto object-contain" />
+                  <TracklyLogoComp variant="dark" size="sm" />
                 </div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">RECIBO</span>
               </div>
