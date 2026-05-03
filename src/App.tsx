@@ -228,7 +228,7 @@ const OnboardingScreen = ({ onNext }: { onNext: () => void }) => (
       animate={{ scale: 1, opacity: 1 }}
       src="/logo-1.png"
       alt="Trackly"
-      className="h-9 w-auto mb-10 object-contain mx-auto"
+      className="h-8 w-auto object-contain mb-10 mx-auto"
     />
     
     <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Bienvenido</h1>
