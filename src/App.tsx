@@ -5,6 +5,7 @@
 
 import React from "react";
 import { motion } from "motion/react";
+import jsPDF from "jspdf";
 import TracklyLogo from "./assets/logo-1.png";
 import { 
   ChevronLeft, 
@@ -806,7 +807,116 @@ const SummaryScreen = ({
   );
 };
 
-const ReceiptPreviewScreen = ({ movement, onBack }: { movement: Movement, onBack: () => void }) => {
+const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movement, onBack: () => void, profile: ProfileData }) => {
+  const downloadPDF = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const brandColor = [110, 184, 181]; // Roughly Trackly's primary color
+      const secondaryColor = [243, 82, 102]; // For expenses or pending
+
+      // Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor( brandColor[0], brandColor[1], brandColor[2]);
+      doc.text("Trackly", 20, 25);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(150, 150, 150);
+      doc.text("RECIBO PROFESIONAL", 20, 31);
+
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`#000${movement.id}23`, 190, 25, { align: "right" });
+      doc.setTextColor(150, 150, 150);
+      doc.text(movement.date, 190, 31, { align: "right" });
+
+      // Divider
+      doc.setDrawColor(240, 240, 240);
+      doc.line(20, 40, 190, 40);
+
+      // From / To
+      doc.setFontSize(10);
+      doc.setTextColor(150, 150, 150);
+      doc.text("DE:", 20, 50);
+      doc.text("PARA:", 190, 50, { align: "right" });
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.text(profile.fullName, 20, 56);
+      doc.text(movement.concept, 190, 56, { align: "right" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text(profile.businessName || profile.jobType, 20, 61);
+      doc.text(profile.email, 20, 66);
+
+      // Concept Section
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(150, 150, 150);
+      doc.text("CONCEPTO", 20, 85);
+      
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      doc.text(movement.concept, 20, 93);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(10);
+      doc.setTextColor(120, 120, 120);
+      const splitNotes = doc.splitTextToSize(movement.notes || "Sin notas adicionales.", 160);
+      doc.text(splitNotes, 20, 100);
+
+      // Status
+      const isSettled = movement.status === 'settled';
+      const statusText = isSettled ? "COBRADO" : "PENDIENTE";
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      if (isSettled) {
+        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      } else {
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      }
+      doc.text(`ESTADO: ${statusText}`, 105, 130, { align: "center" });
+
+      // Total
+      doc.setDrawColor(245, 245, 245);
+      doc.setLineDashPattern([2], 0);
+      doc.line(40, 145, 170, 145);
+      doc.setLineDashPattern([], 0);
+
+      doc.setTextColor(150, 150, 150);
+      doc.setFontSize(10);
+      doc.text("Total del Recibo", 105, 155, { align: "center" });
+
+      doc.setFontSize(32);
+      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      if (movement.type === 'expense') {
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      }
+      doc.text(`${movement.amount > 0 ? '+' : ''}${movement.amount},00 €`, 105, 170, { align: "center" });
+
+      // Footer
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(200, 200, 200);
+      doc.text("Generado con Trackly", 105, 280, { align: "center" });
+
+      // Save
+      const fileName = `trackly-recibo-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${movement.date.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`;
+      doc.save(fileName);
+      alert("Recibo descargado");
+    } catch (error) {
+      console.error(error);
+      alert("No se pudo generar el recibo");
+    }
+  };
+
   return (
     <div className="bg-background min-h-screen">
       <ScreenHeader title="Vista previa de recibo" onBack={onBack} />
@@ -834,8 +944,8 @@ const ReceiptPreviewScreen = ({ movement, onBack }: { movement: Movement, onBack
             <div className="grid grid-cols-2 gap-6 py-6 border-y border-gray-50 mb-6 font-sans">
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">DE:</p>
-                <p className="text-sm font-bold text-gray-900 leading-tight">Alejandro Lopez</p>
-                <p className="text-[10px] font-bold text-gray-400 opacity-70">Lopez Jardines</p>
+                <p className="text-sm font-bold text-gray-900 leading-tight">{profile.fullName}</p>
+                <p className="text-[10px] font-bold text-gray-400 opacity-70">{profile.businessName || profile.jobType}</p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">PARA:</p>
@@ -885,7 +995,10 @@ const ReceiptPreviewScreen = ({ movement, onBack }: { movement: Movement, onBack
 
         {/* Action Buttons */}
         <div className="w-full max-w-md space-y-4 px-2">
-          <button className="w-full py-5 bg-primary text-white rounded-[1.75rem] text-base font-bold shadow-2xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">
+          <button 
+            onClick={downloadPDF}
+            className="w-full py-5 bg-primary text-white rounded-[1.75rem] text-base font-bold shadow-2xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
+          >
             Descargar PDF
           </button>
           <button className="w-full py-5 border-2 border-primary/20 text-primary rounded-[1.75rem] text-base font-bold bg-white hover:bg-gray-50 active:scale-95 transition-all">
@@ -1584,6 +1697,7 @@ export default function App() {
         <ReceiptPreviewScreen 
           movement={currentMovement} 
           onBack={() => setScreen('edit-movement')} 
+          profile={profile}
         />
       );
       case 'profile': return (
