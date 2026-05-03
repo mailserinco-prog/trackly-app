@@ -6,8 +6,8 @@
 import React from "react";
 import { motion } from "motion/react";
 import jsPDF from "jspdf";
-import logoSquare from "./assets/logo-1.png";
-import logoHorizontal from "./assets/logo-horizontal.png";
+import { tracklyLogoHorizontalBase64 } from "./assets/tracklyLogoBase64";
+import { tracklyLogoSquareBase64 } from "./assets/tracklyLogoSquareBase64";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -142,8 +142,8 @@ const TracklyLogoComp = ({
   };
 
   const logoSrc = direction === "horizontal" && showText
-    ? logoHorizontal
-    : logoSquare;
+    ? tracklyLogoHorizontalBase64
+    : tracklyLogoSquareBase64;
 
   return (
     <div className={`flex items-center shrink-0 ${className}`}>
@@ -1055,9 +1055,8 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       // Stylized Logo Text
       try {
         // We use the imported Logo as a static asset. 
-        // Note: For production use with jsPDF, pre-loading as base64 is often better, 
-        // but often the path works if handled correctly by Vite's build.
-        doc.addImage(logoHorizontal, 'PNG', 20, 15, 40, 12);
+        // Note: Using base64 directly ensures it works in all environments (mobile/prod)
+        doc.addImage(tracklyLogoHorizontalBase64, 'PNG', 20, 15, 40, 12);
       } catch (e) {
         // Fallback to text if image fails
         doc.setFont("helvetica", "bold");
