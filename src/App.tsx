@@ -136,9 +136,9 @@ const TracklyLogoComp = ({
   direction?: 'horizontal' | 'vertical'
 }) => {
   const sizeClasses = {
-    sm: direction === "horizontal" ? "h-8" : "h-7",
-    md: direction === "horizontal" ? "h-10" : "h-9",
-    lg: direction === "horizontal" ? "h-14" : "h-12"
+    sm: "h-8",
+    md: "h-10",
+    lg: "h-14"
   };
 
   const logoSrc = direction === "horizontal" && showText
@@ -146,12 +146,13 @@ const TracklyLogoComp = ({
     : logoSquare;
 
   return (
-    <div className={`flex items-center ${className}`}>
+    <div className={`flex items-center shrink-0 ${className}`}>
       <img
         src={logoSrc}
         alt="Trackly"
         draggable={false}
-        className={`${sizeClasses[size]} w-auto object-contain select-none`}
+        loading="eager"
+        className={`${sizeClasses[size]} w-auto object-contain select-none block`}
       />
     </div>
   );
@@ -175,19 +176,19 @@ const ScreenHeader = ({
       <div className="header-shape-1 opacity-20" />
       <div className="header-shape-2 opacity-10" />
       
-      <div className="flex justify-between items-center relative z-10 mb-8">
-        <div className="flex items-center gap-3">
+      <div className="flex justify-between items-center relative z-10 mb-8 gap-4">
+        <div className="flex items-center gap-3 shrink-0 min-w-[80px]">
           {onBack && (
-            <button onClick={onBack} className="p-2 -ml-2 hover:bg-white/10 rounded-xl transition-colors">
+            <button onClick={onBack} className="p-2 -ml-2 hover:bg-white/10 rounded-xl transition-colors shrink-0">
               <ChevronLeft size={24} strokeWidth={2.5} />
             </button>
           )}
-          <TracklyLogoComp size="sm" />
+          <TracklyLogoComp size="sm" className="shrink-0" />
         </div>
-        <h1 className="text-xl font-bold tracking-tight">{title}</h1>
-        <div>
+        <h1 className="text-lg font-bold tracking-tight truncate flex-1 text-center">{title}</h1>
+        <div className="flex justify-end shrink-0 min-w-[80px]">
           {rightElement || (
-            <button className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+            <button className="p-2 hover:bg-white/10 rounded-xl transition-colors shrink-0">
               <User size={22} />
             </button>
           )}
