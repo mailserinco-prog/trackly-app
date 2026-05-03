@@ -267,105 +267,280 @@ const OnboardingScreen = ({ onNext }: { onNext: () => void }) => (
     </div>
   </div>
 );
-const StatsScreen = () => (
-  <div>
-    <ScreenHeader title="Estadísticas" />
-    <ContentCard>
-      <div className="space-y-8 max-w-2xl mx-auto">
-        <section>
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest px-1">Gráfico de Actividad</h3>
-            <div className="flex gap-2">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                <span className="text-[10px] font-bold text-gray-400">ING</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-secondary" />
-                <span className="text-[10px] font-bold text-gray-400">GAS</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-end justify-between h-44 gap-3 mb-4 px-2">
-            {[
-              { label: 'Feb', inc: 65, exp: 40 },
-              { label: 'Mar', inc: 80, exp: 50 },
-              { label: 'Abr', inc: 70, exp: 55 },
-              { label: 'May', inc: 95, exp: 45, current: true },
-            ].map((bar, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-3 h-full">
-                <div className="flex gap-1.5 w-full justify-center items-end h-full">
-                  <motion.div 
-                    initial={{ height: 0 }}
-                    animate={{ height: `${bar.inc}%` }}
-                    className={`w-4 rounded-t-lg transition-all duration-500 shadow-sm ${bar.current ? 'bg-primary' : 'bg-primary/30'}`} 
-                  />
-                  <motion.div 
-                    initial={{ height: 0 }}
-                    animate={{ height: `${bar.exp}%` }}
-                    className={`w-4 rounded-t-lg transition-all duration-500 shadow-sm ${bar.current ? 'bg-secondary' : 'bg-secondary/30'}`} 
-                  />
+const StatsScreen = ({ 
+  movements, 
+  selectedMonth, 
+  setSelectedMonth,
+  selectedYear,
+  setSelectedYear
+}: { 
+  movements: Movement[], 
+  selectedMonth: number,
+  setSelectedMonth: (m: number) => void,
+  selectedYear: number,
+  setSelectedYear: (y: number) => void
+}) => {
+  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  
+  // Helper to filter movements by month/year
+  const getMovementsFor = (mIdx: number, year: number) => {
+    const monthName = months[mIdx];
+    return movements.filter(m => m.date.includes(monthName)); 
+    // Note: In a production app with ISO dates, this would be more robust.
+  };
+
+  const currentMovements = getMovementsFor(selectedMonth, selectedYear);
+  
+  const currentIncomes = currentMovements
+    .filter(m => m.type === 'income' && m.status === 'settled')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+    
+  const currentExpenses = currentMovements
+    .filter(m => m.type === 'expense' && m.status === 'settled')
+    .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+
+  const currentBalance = currentIncomes - currentExpenses;
+
+  // Pending totals (Global)
+  const pendingIncomesTotal = movements
+    .filter(m => m.type === 'income' && m.status === 'pending')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  const pendingExpensesTotal = movements
+    .filter(m => m.type === 'expense' && m.status === 'pending')
+    .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+
+  // Comparison with Previous Month
+  const prevMonthIdx = selectedMonth === 0 ? 11 : selectedMonth - 1;
+  const prevYear = selectedMonth === 0 ? selectedYear - 1 : selectedYear;
+  const prevMovements = getMovementsFor(prevMonthIdx, prevYear);
+  
+  const prevIncomes = prevMovements
+    .filter(m => m.type === 'income' && m.status === 'settled')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+    
+  const prevExpenses = prevMovements
+    .filter(m => m.type === 'expense' && m.status === 'settled')
+    .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+
+  const incomeChange = prevIncomes === 0 ? (currentIncomes > 0 ? 100 : 0) : ((currentIncomes - prevIncomes) / prevIncomes) * 100;
+  const expenseChange = prevExpenses === 0 ? (currentExpenses > 0 ? 100 : 0) : ((currentExpenses - prevExpenses) / prevExpenses) * 100;
+
+  // Top items
+  const topIncome = [...currentMovements]
+    .filter(m => m.type === 'income')
+    .sort((a, b) => b.amount - a.amount)[0];
+
+  const topExpense = [...currentMovements]
+    .filter(m => m.type === 'expense')
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+
+  // Chart Data (Last 4 months)
+  const chartData = [3, 2, 1, 0].map(offset => {
+    const mIdx = (selectedMonth - offset + 12) % 12;
+    const y = selectedMonth - offset < 0 ? selectedYear - 1 : selectedYear;
+    const movs = getMovementsFor(mIdx, y);
+    const inc = movs.filter(m => m.type === 'income' && m.status === 'settled').reduce((a, c) => a + c.amount, 0);
+    const exp = movs.filter(m => m.type === 'expense' && m.status === 'settled').reduce((a, c) => a + Math.abs(c.amount), 0);
+    
+    // Normalize for height (max 100)
+    const maxVal = Math.max(...[0, 1, 2, 3].map(o => {
+      const idx = (selectedMonth - o + 12) % 12;
+      const yr = selectedMonth - o < 0 ? selectedYear - 1 : selectedYear;
+      const m = getMovementsFor(idx, yr);
+      return Math.max(
+        m.filter(mv => mv.type === 'income' && mv.status === 'settled').reduce((a, c) => a + c.amount, 0),
+        m.filter(mv => mv.type === 'expense' && mv.status === 'settled').reduce((a, c) => a + Math.abs(c.amount), 0)
+      );
+    }), 1);
+
+    return {
+      label: months[mIdx],
+      inc: (inc / maxVal) * 100,
+      exp: (exp / maxVal) * 100,
+      current: offset === 0,
+      rawInc: inc,
+      rawExp: exp
+    };
+  });
+
+  return (
+    <div>
+      <ScreenHeader title="Estadísticas" />
+      <ContentCard>
+        <div className="space-y-8 max-w-2xl mx-auto">
+          {/* Monthly Summary Card */}
+          <section>
+            <div className="bg-gray-50/50 rounded-[2rem] p-6 border border-gray-100/50 shadow-inner">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Resumen de {months[selectedMonth]}</h3>
+                <div className="relative inline-flex items-center">
+                  <select 
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                    className="appearance-none bg-white border-none rounded-xl px-3 py-1.5 pr-8 text-[10px] font-bold text-gray-500 outline-none shadow-sm"
+                  >
+                    {months.map((m, i) => (
+                      <option key={i} value={i}>{m}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={12} className="absolute right-2 text-gray-400 pointer-events-none" />
                 </div>
-                <span className={`text-[10px] font-bold uppercase ${bar.current ? 'text-primary' : 'text-gray-400'}`}>
-                  {bar.label}
-                </span>
               </div>
-            ))}
-          </div>
-        </section>
+              
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center p-3 bg-white rounded-2xl shadow-sm border border-gray-100/50">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">Ingresos</p>
+                  <p className="text-xs font-bold text-primary">+{currentIncomes.toLocaleString()}€</p>
+                </div>
+                <div className="text-center p-3 bg-white rounded-2xl shadow-sm border border-gray-100/50">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">Gastos</p>
+                  <p className="text-xs font-bold text-secondary">-{currentExpenses.toLocaleString()}€</p>
+                </div>
+                <div className="text-center p-3 bg-brand-gradient rounded-2xl shadow-lg shadow-primary/10">
+                  <p className="text-[9px] font-bold text-white/70 uppercase mb-1">Balance</p>
+                  <p className="text-xs font-bold text-white">{currentBalance >= 0 ? '+' : ''}{currentBalance.toLocaleString()}€</p>
+                </div>
+              </div>
+            </div>
+          </section>
 
-        <div className="grid grid-cols-2 gap-4">
-          <Card className="flex flex-col justify-between p-5 bg-gray-50/50 border-none">
-            <h3 className="font-bold text-[10px] text-gray-400 uppercase tracking-[0.15em] mb-4">Crecimiento</h3>
-            <div className="flex items-center gap-2 text-primary font-bold">
-              <TrendingUp size={16} />
-              <span className="text-lg font-numeric">+15%</span>
+          {/* Activity Chart */}
+          <section>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Ingresos vs Gastos</h3>
+              <div className="flex gap-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">Ing</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-secondary" />
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">Gas</span>
+                </div>
+              </div>
             </div>
-            <p className="text-[10px] text-gray-400 mt-2">Respecto al mes anterior</p>
-          </Card>
-          
-          <Card className="p-5 bg-gray-50/50 border-none">
-            <h3 className="font-bold text-[10px] text-gray-400 uppercase tracking-[0.15em] mb-4">Eficiencia</h3>
-            <div className="flex items-center gap-2 text-primary font-bold">
-              <Check size={16} />
-              <span className="text-lg font-numeric">82%</span>
+            <div className="flex items-end justify-between h-44 gap-3 mb-4 px-2">
+              {chartData.map((bar, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-3 h-full">
+                  <div className="flex gap-1.5 w-full justify-center items-end h-full">
+                    <motion.div 
+                      initial={{ height: 0 }}
+                      animate={{ height: `${Math.max(bar.inc, 5)}%` }}
+                      className={`w-4 rounded-t-lg transition-all duration-500 shadow-sm ${bar.current ? 'bg-primary' : 'bg-primary/30'}`} 
+                    />
+                    <motion.div 
+                      initial={{ height: 0 }}
+                      animate={{ height: `${Math.max(bar.exp, 5)}%` }}
+                      className={`w-4 rounded-t-lg transition-all duration-500 shadow-sm ${bar.current ? 'bg-secondary' : 'bg-secondary/30'}`} 
+                    />
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase ${bar.current ? 'text-primary' : 'text-gray-400'}`}>
+                    {bar.label}
+                  </span>
+                </div>
+              ))}
             </div>
-            <p className="text-[10px] text-gray-400 mt-2">Gastos dentro de presupuesto</p>
-          </Card>
+          </section>
+
+          {/* Pending Totals */}
+          <div className="grid grid-cols-2 gap-4">
+            <Card className="flex flex-col justify-between p-5 bg-primary/5 border-none">
+              <h3 className="font-bold text-[10px] text-primary/60 uppercase tracking-[0.15em] mb-4">A cobrar</h3>
+              <div className="flex items-center gap-2 text-primary font-bold">
+                <Hourglass size={16} />
+                <span className="text-lg font-numeric">+{pendingIncomesTotal.toLocaleString()}€</span>
+              </div>
+              <p className="text-[9px] text-primary/40 font-bold uppercase mt-2">Total pendiente</p>
+            </Card>
+            
+            <Card className="p-5 bg-secondary/5 border-none">
+              <h3 className="font-bold text-[10px] text-secondary/60 uppercase tracking-[0.15em] mb-4">A pagar</h3>
+              <div className="flex items-center gap-2 text-secondary font-bold">
+                <Clock size={16} />
+                <span className="text-lg font-numeric">-{pendingExpensesTotal.toLocaleString()}€</span>
+              </div>
+              <p className="text-[9px] text-secondary/40 font-bold uppercase mt-2">Total pendiente</p>
+            </Card>
+          </div>
+
+          {/* Comparison Cards */}
+          <div className="grid grid-cols-2 gap-4">
+            <Card className="p-5 bg-gray-50/50 border-none">
+              <h3 className="font-bold text-[10px] text-gray-400 uppercase tracking-[0.15em] mb-4">Ingresos</h3>
+              <div className={`flex items-center gap-2 font-bold ${incomeChange >= 0 ? 'text-primary' : 'text-secondary'}`}>
+                {incomeChange >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                <span className="text-lg font-numeric">{incomeChange >= 0 ? '+' : ''}{incomeChange.toFixed(0)}%</span>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">vs mes anterior</p>
+            </Card>
+            <Card className="p-5 bg-gray-50/50 border-none">
+              <h3 className="font-bold text-[10px] text-gray-400 uppercase tracking-[0.15em] mb-4">Gastos</h3>
+              <div className={`flex items-center gap-2 font-bold ${expenseChange <= 0 ? 'text-primary' : 'text-secondary'}`}>
+                {expenseChange <= 0 ? <TrendingDown size={16} /> : <TrendingUp size={16} />}
+                <span className="text-lg font-numeric">{expenseChange > 0 ? '+' : ''}{expenseChange.toFixed(0)}%</span>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">vs mes anterior</p>
+            </Card>
+          </div>
+
+          {/* Highlights */}
+          <section>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] mb-4 px-1">Destacados de {months[selectedMonth]}</h3>
+            <div className="space-y-3">
+              {topIncome ? (
+                <div className="flex items-center gap-4 p-4 bg-gray-50/30 rounded-2xl border border-gray-100/50">
+                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-primary">
+                    <TrendingUp size={24} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-gray-900 truncate">{topIncome.concept}</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Mayor ingreso</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-primary font-numeric">+{topIncome.amount.toLocaleString()}€</p>
+                  </div>
+                </div>
+              ) : null}
+
+              {topExpense ? (
+                <div className="flex items-center gap-4 p-4 bg-gray-50/30 rounded-2xl border border-gray-100/50">
+                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-secondary">
+                    <TrendingDown size={24} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-gray-900 truncate">{topExpense.concept}</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Mayor gasto</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-secondary font-numeric">-{Math.abs(topExpense.amount).toLocaleString()}€</p>
+                  </div>
+                </div>
+              ) : null}
+
+              {!topIncome && !topExpense && (
+                <div className="py-8 text-center bg-gray-50/30 rounded-2xl border border-dashed border-gray-200">
+                  <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Sin movimientos este mes</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <div className="relative h-48 rounded-[2rem] overflow-hidden shadow-2xl shadow-black/5">
+            <img 
+              src="https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?auto=format&fit=crop&q=80&w=800" 
+              alt="Motivation" 
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-6">
+              <p className="text-white text-xs italic font-medium leading-relaxed opacity-90">"La disciplina financiera te da opciones, la falta de ella te da estrés."</p>
+            </div>
+          </div>
         </div>
-
-        <section>
-          <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] mb-4 px-1">Mayor Impacto en Mayo</h3>
-          <div className="space-y-3">
-            <div className="flex items-center gap-4 p-4 bg-gray-50/30 rounded-2xl border border-gray-100/50">
-              <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-primary">
-                <TrendingUp size={24} />
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-sm text-gray-900">Proyecto X</p>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Ingreso principal</p>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-primary font-numeric">+2.100 €</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div className="relative h-48 rounded-[2rem] overflow-hidden shadow-2xl shadow-black/5">
-          <img 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYfuXzy8ByiCMNSel3x-fx5v6Guv9I8DUN41bIcu5UKH801rXrUv1ksreYysUFDpJn5DdUIwnJIjKCoVNj1BNeavh6DN5FbZ8xT3GW_m6T6eJlzTXlLyZPo7jYuVonX2Z19gjh7JsfobJ0ezZ6NuxUz_BDbXmfnREgU0eDUFDNc8hXr_UUNMYy9dFc99zw3g0pE6dxJO64btNrI6cTVpF1Wwcx_BytR3jFp1H-hQJocESxZKuTn4j-Mtw7XLJwehrdDriNXtn0HdH2" 
-            alt="Motivation" 
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-6">
-            <p className="text-white text-xs italic font-medium leading-relaxed opacity-90">"La disciplina financiera te da opciones, la falta de ella te da estrés."</p>
-          </div>
-        </div>
-      </div>
-    </ContentCard>
-  </div>
-);
+      </ContentCard>
+    </div>
+  );
+};
 
 const MovementsScreen = ({ 
   setScreen, 
@@ -1711,7 +1886,15 @@ export default function App() {
   const renderScreen = () => {
     switch (screen) {
       case 'onboarding': return <OnboardingScreen onNext={() => setScreen('movements')} />;
-      case 'stats': return <StatsScreen />;
+      case 'stats': return (
+        <StatsScreen 
+          movements={movements} 
+          selectedMonth={selectedMonth} 
+          setSelectedMonth={setSelectedMonth}
+          selectedYear={selectedYear}
+          setSelectedYear={setSelectedYear}
+        />
+      );
       case 'movements': return (
         <MovementsScreen 
           setScreen={setScreen} 
