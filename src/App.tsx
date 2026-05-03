@@ -7,6 +7,7 @@ import React from "react";
 import { motion } from "motion/react";
 import jsPDF from "jspdf";
 import TracklyLogo from "./assets/logo-1.png";
+import TracklyLogoHorizontal from "./assets/logo-horizontal.png";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -816,99 +817,146 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
         format: 'a4'
       });
 
-      const brandColor = [110, 184, 181]; // Roughly Trackly's primary color
-      const secondaryColor = [243, 82, 102]; // For expenses or pending
+      const brandColor = [110, 184, 181]; // Trackly Primary (Teal)
+      const secondaryColor = [243, 82, 102]; // For Expenses or Pending (Red)
+      const textColor = [31, 41, 55]; // Dark Gray/Black
+      const muteColor = [156, 163, 175]; // Light Gray
 
-      // Header
+      // Date Formatting Utility for PDF
+      const formatFormalDate = (dateStr: string) => {
+        // Simple cleanup: removes day-of-week abbreviations like "Ma. "
+        let cleaned = dateStr.replace(/^[A-Za-z]{2}\.\s+/, "");
+        // Map months to full names in Spanish
+        const monthsMap: Record<string, string> = {
+          'Ene': 'Enero', 'Feb': 'Febrero', 'Mar': 'Marzo', 'Abr': 'Abril',
+          'May': 'Mayo', 'Jun': 'Junio', 'Jul': 'Julio', 'Ago': 'Agosto',
+          'Sep': 'Septiembre', 'Oct': 'Octubre', 'Nov': 'Noviembre', 'Dic': 'Diciembre'
+        };
+        Object.keys(monthsMap).forEach(m => {
+          if (cleaned.includes(m)) cleaned = cleaned.replace(m, monthsMap[m]);
+        });
+        return cleaned + " 2026"; // App context year
+      };
+
+      // 1. CABECERA
+      // Stylized Logo Text
+      try {
+        // We use the imported Logo as a static asset. 
+        // Note: For production use with jsPDF, pre-loading as base64 is often better, 
+        // but often the path works if handled correctly by Vite's build.
+        doc.addImage(TracklyLogoHorizontal, 'PNG', 20, 15, 40, 12);
+      } catch (e) {
+        // Fallback to text if image fails
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(24);
+        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+        doc.text("Trackly", 20, 25);
+      }
+
+      doc.setFontSize(28);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(22);
-      doc.setTextColor( brandColor[0], brandColor[1], brandColor[2]);
-      doc.text("Trackly", 20, 25);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(150, 150, 150);
-      doc.text("RECIBO PROFESIONAL", 20, 31);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text("RECIBO", 105, 50, { align: "center" });
 
       doc.setFontSize(10);
-      doc.setTextColor(0, 0, 0);
-      doc.text(`#000${movement.id}23`, 190, 25, { align: "right" });
-      doc.setTextColor(150, 150, 150);
-      doc.text(movement.date, 190, 31, { align: "right" });
-
-      // Divider
-      doc.setDrawColor(240, 240, 240);
-      doc.line(20, 40, 190, 40);
-
-      // From / To
-      doc.setFontSize(10);
-      doc.setTextColor(150, 150, 150);
-      doc.text("DE:", 20, 50);
-      doc.text("PARA:", 190, 50, { align: "right" });
-
-      doc.setTextColor(0, 0, 0);
-      doc.setFont("helvetica", "bold");
-      doc.text(profile.fullName, 20, 56);
-      doc.text(movement.concept, 190, 56, { align: "right" });
-
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(100, 100, 100);
-      doc.text(profile.businessName || profile.jobType, 20, 61);
-      doc.text(profile.email, 20, 66);
-
-      // Concept Section
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(150, 150, 150);
-      doc.text("CONCEPTO", 20, 85);
+      doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
+      doc.text(`#000${movement.id.slice(0, 5).toUpperCase()}`, 105, 58, { align: "center" });
       
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(12);
-      doc.text(movement.concept, 20, 93);
+      doc.setFontSize(11);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text(formatFormalDate(movement.date), 105, 66, { align: "center" });
 
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(10);
-      doc.setTextColor(120, 120, 120);
-      const splitNotes = doc.splitTextToSize(movement.notes || "Sin notas adicionales.", 160);
-      doc.text(splitNotes, 20, 100);
+      // Separator
+      doc.setDrawColor(243, 244, 246);
+      doc.line(20, 75, 190, 75);
 
-      // Status
-      const isSettled = movement.status === 'settled';
-      const statusText = isSettled ? "COBRADO" : "PENDIENTE";
-      doc.setFont("helvetica", "bold");
+      // 2. BLOQUE DE DATOS (DE / PARA)
       doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      doc.text("DE:", 20, 90);
+      doc.text("PARA:", 110, 90);
+
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.setFontSize(12);
+      doc.text(profile.fullName, 20, 98);
+      doc.text(movement.concept, 110, 98);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
+      doc.text(profile.businessName || profile.jobType, 20, 104);
+      doc.text(profile.email, 20, 110);
+      doc.text("Cliente / Concepto principal", 110, 104);
+
+      // Separator
+      doc.line(20, 125, 190, 125);
+
+      // 3. CONCEPTO & DETALLE
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      doc.text("CONCEPTO:", 20, 140);
+      
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.setFontSize(13);
+      doc.text(movement.concept, 20, 148);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      doc.text("DETALLE:", 20, 160);
+
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      const notes = movement.notes || "Sin especificaciones adicionales.";
+      const splitNotes = doc.splitTextToSize(notes, 160);
+      doc.text(splitNotes, 20, 168);
+
+      // Separator
+      doc.line(20, 185, 190, 185);
+
+      // 4. TOTAL (MUY IMPORTANTE)
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      doc.text("TOTAL", 105, 205, { align: "center" });
+
+      doc.setFontSize(42);
+      // Remove negative sign for display, use appropriate color
+      const isExpense = movement.type === 'expense';
+      const absAmount = Math.abs(movement.amount);
+      
+      if (isExpense) {
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      } else {
+        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      }
+      doc.text(`${absAmount},00 €`, 105, 222, { align: "center" });
+
+      // 5. ESTADO
+      const isSettled = movement.status === 'settled';
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
       if (isSettled) {
         doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+        doc.text("Estado: COBRADO", 105, 235, { align: "center" });
       } else {
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        doc.text("Estado: PENDIENTE", 105, 235, { align: "center" });
       }
-      doc.text(`ESTADO: ${statusText}`, 105, 130, { align: "center" });
 
-      // Total
-      doc.setDrawColor(245, 245, 245);
-      doc.setLineDashPattern([2], 0);
-      doc.line(40, 145, 170, 145);
-      doc.setLineDashPattern([], 0);
-
-      doc.setTextColor(150, 150, 150);
-      doc.setFontSize(10);
-      doc.text("Total del Recibo", 105, 155, { align: "center" });
-
-      doc.setFontSize(32);
-      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      if (movement.type === 'expense') {
-        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-      }
-      doc.text(`${movement.amount > 0 ? '+' : ''}${movement.amount},00 €`, 105, 170, { align: "center" });
-
-      // Footer
-      doc.setFont("helvetica", "bold");
+      // 9. PIE
       doc.setFontSize(8);
-      doc.setTextColor(200, 200, 200);
-      doc.text("Generado con Trackly", 105, 280, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
+      doc.text("Generado con Trackly", 105, 285, { align: "center" });
 
-      // Save
-      const fileName = `trackly-recibo-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${movement.date.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`;
+      // Filename
+      const safeDate = movement.date.replace(/[^a-z0-9]/gi, '_');
+      const fileName = `trackly-recibo-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${safeDate}.pdf`;
       doc.save(fileName);
       alert("Recibo descargado");
     } catch (error) {
