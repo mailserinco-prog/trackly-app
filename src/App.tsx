@@ -69,7 +69,48 @@ interface ProfileData {
   profilePic: string;
 }
 
-// --- Components ---
+// --- Utils ---
+
+const optimizeImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // JPEG format with 0.7 quality
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        resolve(dataUrl);
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+};
 
 const Card = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
   <div className={`bg-white border border-outline-variant/30 rounded-3xl p-6 shadow-sm ${className}`}>
@@ -885,18 +926,16 @@ const ProfileScreen = ({
     expenses: movements.filter(m => m.type === 'expense').length
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert("La imagen es demasiado grande (máx 5MB)");
-        return;
+      try {
+        const optimized = await optimizeImage(file);
+        setProfile(prev => ({ ...prev, profilePic: optimized }));
+      } catch (err) {
+        console.error("Error optimizing image:", err);
+        alert("Error al procesar la imagen");
       }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setProfile(prev => ({ ...prev, profilePic: event.target?.result as string }));
-      };
-      reader.readAsDataURL(file);
     }
     setShowPhotoMenu(false);
   };
@@ -1201,32 +1240,40 @@ const EditMovementScreen = ({
     }
   };
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>, isCamera: boolean) => {
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>, isCamera: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert("El archivo es demasiado grande (máx 10MB)");
-      return;
-    }
+    try {
+      const type: 'image' | 'pdf' = file.type.includes('pdf') ? 'pdf' : 'image';
+      if (type === 'pdf' && isCamera) return;
 
-    const type: 'image' | 'pdf' = file.type.includes('pdf') ? 'pdf' : 'image';
-    if (type === 'pdf' && isCamera) return; // Camera shouldn't produce PDFs
+      let resultUrl: string;
+      if (type === 'image') {
+        resultUrl = await optimizeImage(file);
+      } else {
+        // For PDFs, we just read as DataURL as before since we can't "canvas-compress" them easily here
+        resultUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(event.target?.result as string);
+          reader.readAsDataURL(file);
+        });
+      }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
       const newAttachment = {
         id: Math.random().toString(36).substr(2, 9),
         name: file.name,
         type,
-        url: event.target?.result as string
+        url: resultUrl
       };
       setEdited(prev => ({
         ...prev,
         attachments: [...(prev.attachments || []), newAttachment]
       }));
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Error handling file:", err);
+      alert("Error al procesar el archivo");
+    }
   };
 
   const removeAttachment = (id: string) => {
