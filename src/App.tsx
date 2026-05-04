@@ -5,6 +5,7 @@
 
 import React from "react";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import jsPDF from "jspdf";
 import { tracklyLogoHorizontalBase64 } from "./assets/tracklyLogoBase64";
 import { tracklyLogoSquareBase64 } from "./assets/tracklyLogoSquareBase64";
@@ -59,6 +60,7 @@ interface Movement {
   notes?: string;
   paidAmount?: number;
   payments?: Payment[];
+  currency?: string;
   attachments?: {
     id: string;
     name: string;
@@ -80,9 +82,19 @@ interface ProfileData {
   mgmtInterest: boolean;
   lastAccess: string;
   profilePic: string;
+  language?: string;
+  currency?: string;
 }
 
 // --- Utils ---
+
+const formatCurrency = (amount: number, currency: string = 'EUR', language: string = 'es') => {
+  const locale = language === 'en' ? 'en-US' : 'es-ES';
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: currency || 'EUR'
+  }).format(amount);
+};
 
 const getMovementPaidAmount = (movement: Movement) => {
   if (movement.paidAmount !== undefined) return movement.paidAmount;
@@ -158,6 +170,17 @@ const optimizeImage = (file: File): Promise<string> => {
   });
 };
 
+const getCurrencySymbol = (currency: string = 'EUR') => {
+  switch (currency) {
+    case 'USD': return '$';
+    case 'GBP': return '£';
+    case 'EUR': return '€';
+    case 'MXN': return '$';
+    case 'ARS': return '$';
+    default: return '€';
+  }
+};
+
 const Card = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
   <div className={`bg-white border border-outline-variant/30 rounded-3xl p-6 shadow-sm ${className}`}>
     {children}
@@ -207,14 +230,19 @@ const ScreenHeader = ({
   onBack, 
   showStats = false, 
   rightElement,
-  customStats
+  customStats,
+  currency = 'EUR',
+  language = 'es'
 }: { 
   title: string, 
   onBack?: () => void, 
   showStats?: boolean,
   rightElement?: React.ReactNode,
-  customStats?: { balance: number, incomes: number, expenses: number }
+  customStats?: { balance: number, incomes: number, expenses: number },
+  currency?: string,
+  language?: string
 }) => {
+  const { t } = useTranslation();
   return (
     <div className="bg-brand-gradient text-white pt-10 pb-16 px-6 relative overflow-hidden">
       <div className="header-shape-1 opacity-20" />
@@ -246,22 +274,22 @@ const ScreenHeader = ({
           className="relative z-10 space-y-4"
         >
           <div>
-            <p className="text-[10px] font-bold tracking-[0.15em] opacity-70 uppercase mb-0.5">Balance Actual</p>
+            <p className="text-[10px] font-bold tracking-[0.15em] opacity-70 uppercase mb-0.5">{t('wallet.totalBalance')}</p>
             <p className="text-3xl font-bold font-numeric tracking-tight">
-              {customStats ? (customStats.balance >= 0 ? `+${customStats.balance.toLocaleString()}` : customStats.balance.toLocaleString()) : '+1.330,00'} €
+              {formatCurrency(customStats ? customStats.balance : 1330, currency, language)}
             </p>
           </div>
           <div className="flex gap-8 border-t border-white/10 pt-4">
             <div>
-              <p className="text-[10px] font-bold opacity-60 uppercase mb-0.5">Ingresos cobrados</p>
+              <p className="text-[10px] font-bold opacity-60 uppercase mb-0.5">{t('wallet.collected')}</p>
               <p className="text-sm font-bold font-numeric">
-                +{customStats ? customStats.incomes.toLocaleString() : '2.450,00'} €
+                {formatCurrency(customStats ? customStats.incomes : 2450, currency, language)}
               </p>
             </div>
             <div>
-              <p className="text-[10px] font-bold opacity-60 uppercase mb-0.5">Gastos pagados</p>
+              <p className="text-[10px] font-bold opacity-60 uppercase mb-0.5">{t('wallet.pending')}</p>
               <p className="text-sm font-bold font-numeric">
-                -{customStats ? customStats.expenses.toLocaleString() : '1.120,00'} €
+                {formatCurrency(customStats ? customStats.expenses : 1120, currency, language)}
               </p>
             </div>
           </div>
@@ -277,14 +305,16 @@ const ContentCard = ({ children, className = "" }: { children: React.ReactNode, 
   </div>
 );
 
-const Tabs = [
-  { id: 'movements', label: 'Cartera', icon: Wallet },
-  { id: 'summary', label: 'Resumen', icon: LayoutDashboard },
-  { id: 'stats', label: 'Estadísticas', icon: BarChart3 },
-  { id: 'profile', label: 'Perfil', icon: User },
-] as const;
-
 const BottomNav = ({ currentScreen, setScreen }: { currentScreen: AppScreen, setScreen: (s: AppScreen) => void }) => {
+  const { t } = useTranslation();
+  
+  const Tabs = [
+    { id: 'movements', label: t('nav.wallet'), icon: Wallet },
+    { id: 'summary', label: t('nav.summary'), icon: LayoutDashboard },
+    { id: 'stats', label: t('nav.stats'), icon: BarChart3 },
+    { id: 'profile', label: t('nav.profile'), icon: User },
+  ] as const;
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-outline-variant/30 flex justify-around items-center px-4 z-50">
       {Tabs.map((tab) => (
@@ -305,70 +335,83 @@ const BottomNav = ({ currentScreen, setScreen }: { currentScreen: AppScreen, set
 
 // --- Screens ---
 
-const OnboardingScreen = ({ onNext }: { onNext: () => void }) => (
-  <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center bg-background">
-    <motion.div
-      initial={{ scale: 0.8, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      className="mb-10"
-    >
-      <TracklyLogoComp variant="dark" size="lg" direction="vertical" />
-    </motion.div>
-    
-    <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Bienvenido</h1>
-    <p className="text-gray-500 mb-12 max-w-xs">Guarda tus datos para no perder tus cobros si cambias de móvil o reinstalas la app.</p>
-    
-    <Card className="mb-12 bg-white/50 border-dashed max-w-sm w-full">
-      <div className="flex items-center gap-4">
-        <div className="p-2 bg-white rounded-lg border border-outline-variant/30 shadow-sm">
-          <ShieldCheck className="text-primary" size={24} />
+const OnboardingScreen = ({ onNext }: { onNext: () => void }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center bg-background">
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="mb-10"
+      >
+        <TracklyLogoComp variant="dark" size="lg" direction="vertical" />
+      </motion.div>
+      
+      <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">{t('onboarding.welcome')}</h1>
+      <p className="text-gray-500 mb-12 max-w-xs">{t('onboarding.subtitle')}</p>
+      
+      <Card className="mb-12 bg-white/50 border-dashed max-w-sm w-full">
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-white rounded-lg border border-outline-variant/30 shadow-sm">
+            <ShieldCheck className="text-primary" size={24} />
+          </div>
+          <p className="text-left text-sm text-gray-600 leading-snug">
+            {t('onboarding.securityText')}
+          </p>
         </div>
-        <p className="text-left text-sm text-gray-600 leading-snug">
-          Tus datos están protegidos bajo estándares de seguridad bancaria.
-        </p>
+      </Card>
+      
+      <button 
+        onClick={onNext}
+        className="w-full max-w-sm bg-brand-gradient text-white py-4 rounded-2xl font-semibold flex items-center justify-center gap-3 shadow-lg shadow-primary/20 active:scale-[0.98] transition-transform hover:brightness-110"
+      >
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="white"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="white" opacity="0.8"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="white" opacity="0.6"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="white" opacity="0.9"/>
+        </svg>
+        {t('onboarding.continueWithGoogle')}
+      </button>
+      
+      <div className="mt-12 flex gap-2">
+        <div className="w-2 h-2 rounded-full bg-primary"></div>
+        <div className="w-2 h-2 rounded-full bg-gray-200"></div>
+        <div className="w-2 h-2 rounded-full bg-gray-200"></div>
       </div>
-    </Card>
-    
-    <button 
-      onClick={onNext}
-      className="w-full max-w-sm bg-brand-gradient text-white py-4 rounded-2xl font-semibold flex items-center justify-center gap-3 shadow-lg shadow-primary/20 active:scale-[0.98] transition-transform hover:brightness-110"
-    >
-      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="white"/>
-        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="white" opacity="0.8"/>
-        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="white" opacity="0.6"/>
-        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="white" opacity="0.9"/>
-      </svg>
-      Continuar con Google
-    </button>
-    
-    <div className="mt-12 flex gap-2">
-      <div className="w-2 h-2 rounded-full bg-primary"></div>
-      <div className="w-2 h-2 rounded-full bg-gray-200"></div>
-      <div className="w-2 h-2 rounded-full bg-gray-200"></div>
     </div>
-  </div>
-);
+  );
+};
 const StatsScreen = ({ 
   movements, 
   selectedMonth, 
   setSelectedMonth,
   selectedYear,
-  setSelectedYear
+  setSelectedYear,
+  currency = 'EUR',
+  language = 'es'
 }: { 
   movements: Movement[], 
   selectedMonth: number,
   setSelectedMonth: (m: number) => void,
   selectedYear: number,
-  setSelectedYear: (y: number) => void
+  setSelectedYear: (y: number) => void,
+  currency?: string,
+  language?: string
 }) => {
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const { t } = useTranslation();
+  const months = [
+    t('months.jan'), t('months.feb'), t('months.mar'), t('months.apr'), 
+    t('months.may'), t('months.jun'), t('months.jul'), t('months.aug'), 
+    t('months.sep'), t('months.oct'), t('months.nov'), t('months.dec')
+  ];
   
   // Helper to filter movements by month/year
   const getMovementsFor = (mIdx: number, year: number) => {
-    const monthName = months[mIdx];
+    // In a real app we'd use a robust date check, for now we keep the concept matching
+    const monthNamesES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const monthName = monthNamesES[mIdx];
     return movements.filter(m => m.date.includes(monthName)); 
-    // Note: In a production app with ISO dates, this would be more robust.
   };
 
   const currentMovements = getMovementsFor(selectedMonth, selectedYear);
@@ -448,14 +491,14 @@ const StatsScreen = ({
 
   return (
     <div>
-      <ScreenHeader title="Estadísticas" />
+      <ScreenHeader title={t('stats.title')} currency={currency} language={language} />
       <ContentCard>
         <div className="space-y-8 max-w-2xl mx-auto">
           {/* Monthly Summary Card */}
           <section>
             <div className="bg-gray-50/50 rounded-[2rem] p-6 border border-gray-100/50 shadow-inner">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Resumen de {months[selectedMonth]}</h3>
+                <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('summary.title')} {months[selectedMonth]}</h3>
                 <div className="relative inline-flex items-center">
                   <select 
                     value={selectedMonth}
@@ -472,16 +515,16 @@ const StatsScreen = ({
               
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center p-3 bg-white rounded-2xl shadow-sm border border-gray-100/50">
-                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">Ingresos</p>
-                  <p className="text-xs font-bold text-primary">+{currentIncomes.toLocaleString()}€</p>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">{t('common.income')}</p>
+                  <p className="text-xs font-bold text-primary">{formatCurrency(currentIncomes, currency, language)}</p>
                 </div>
                 <div className="text-center p-3 bg-white rounded-2xl shadow-sm border border-gray-100/50">
-                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">Gastos</p>
-                  <p className="text-xs font-bold text-secondary">-{currentExpenses.toLocaleString()}€</p>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">{t('common.expense')}</p>
+                  <p className="text-xs font-bold text-secondary">{formatCurrency(currentExpenses, currency, language)}</p>
                 </div>
                 <div className="text-center p-3 bg-brand-gradient rounded-2xl shadow-lg shadow-primary/10">
-                  <p className="text-[9px] font-bold text-white/70 uppercase mb-1">Balance</p>
-                  <p className="text-xs font-bold text-white">{currentBalance >= 0 ? '+' : ''}{currentBalance.toLocaleString()}€</p>
+                  <p className="text-[9px] font-bold text-white/70 uppercase mb-1">{t('common.balance')}</p>
+                  <p className="text-xs font-bold text-white">{formatCurrency(currentBalance, currency, language)}</p>
                 </div>
               </div>
             </div>
@@ -490,15 +533,15 @@ const StatsScreen = ({
           {/* Activity Chart */}
           <section>
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Ingresos vs Gastos</h3>
+              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('stats.distribution')}</h3>
               <div className="flex gap-2">
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  <span className="text-[10px] font-bold text-gray-400 uppercase">Ing</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">{t('common.income').slice(0, 3)}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-secondary" />
-                  <span className="text-[10px] font-bold text-gray-400 uppercase">Gas</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">{t('common.expense').slice(0, 3)}</span>
                 </div>
               </div>
             </div>
@@ -528,47 +571,47 @@ const StatsScreen = ({
           {/* Pending Totals */}
           <div className="grid grid-cols-2 gap-4">
             <Card className="flex flex-col justify-between p-5 bg-primary/5 border-none">
-              <h3 className="font-bold text-[10px] text-primary/60 uppercase tracking-[0.15em] mb-4">A cobrar</h3>
+              <h3 className="font-bold text-[10px] text-primary/60 uppercase tracking-[0.15em] mb-4">{t('status.pending')} ({t('common.income')})</h3>
               <div className="flex items-center gap-2 text-primary font-bold">
                 <Hourglass size={16} />
-                <span className="text-lg font-numeric">+{pendingIncomesTotal.toLocaleString()}€</span>
+                <span className="text-lg font-numeric">{formatCurrency(pendingIncomesTotal, currency, language)}</span>
               </div>
-              <p className="text-[9px] text-primary/40 font-bold uppercase mt-2">Total pendiente</p>
+              <p className="text-[9px] text-primary/40 font-bold uppercase mt-2">{t('common.total')} {t('status.pending')}</p>
             </Card>
             
             <Card className="p-5 bg-secondary/5 border-none">
-              <h3 className="font-bold text-[10px] text-secondary/60 uppercase tracking-[0.15em] mb-4">A pagar</h3>
+              <h3 className="font-bold text-[10px] text-secondary/60 uppercase tracking-[0.15em] mb-4">{t('status.pending')} ({t('common.expense')})</h3>
               <div className="flex items-center gap-2 text-secondary font-bold">
                 <Clock size={16} />
-                <span className="text-lg font-numeric">-{pendingExpensesTotal.toLocaleString()}€</span>
+                <span className="text-lg font-numeric">{formatCurrency(pendingExpensesTotal, currency, language)}</span>
               </div>
-              <p className="text-[9px] text-secondary/40 font-bold uppercase mt-2">Total pendiente</p>
+              <p className="text-[9px] text-secondary/40 font-bold uppercase mt-2">{t('common.total')} {t('status.pending')}</p>
             </Card>
           </div>
 
           {/* Comparison Cards */}
           <div className="grid grid-cols-2 gap-4">
             <Card className="p-5 bg-gray-50/50 border-none">
-              <h3 className="font-bold text-[10px] text-gray-400 uppercase tracking-[0.15em] mb-4">Ingresos</h3>
+              <h3 className="font-bold text-[10px] text-gray-400 uppercase tracking-[0.15em] mb-4">{t('common.income')}</h3>
               <div className={`flex items-center gap-2 font-bold ${incomeChange >= 0 ? 'text-primary' : 'text-secondary'}`}>
                 {incomeChange >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                 <span className="text-lg font-numeric">{incomeChange >= 0 ? '+' : ''}{incomeChange.toFixed(0)}%</span>
               </div>
-              <p className="text-[10px] text-gray-400 mt-2">vs mes anterior</p>
+              <p className="text-[10px] text-gray-400 mt-2">{t('summary.prevMonthComparison')}</p>
             </Card>
             <Card className="p-5 bg-gray-50/50 border-none">
-              <h3 className="font-bold text-[10px] text-gray-400 uppercase tracking-[0.15em] mb-4">Gastos</h3>
+              <h3 className="font-bold text-[10px] text-gray-400 uppercase tracking-[0.15em] mb-4">{t('common.expense')}</h3>
               <div className={`flex items-center gap-2 font-bold ${expenseChange <= 0 ? 'text-primary' : 'text-secondary'}`}>
                 {expenseChange <= 0 ? <TrendingDown size={16} /> : <TrendingUp size={16} />}
                 <span className="text-lg font-numeric">{expenseChange > 0 ? '+' : ''}{expenseChange.toFixed(0)}%</span>
               </div>
-              <p className="text-[10px] text-gray-400 mt-2">vs mes anterior</p>
+              <p className="text-[10px] text-gray-400 mt-2">{t('summary.prevMonthComparison')}</p>
             </Card>
           </div>
 
           {/* Highlights */}
           <section>
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] mb-4 px-1">Destacados de {months[selectedMonth]}</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] mb-4 px-1">{t('common.total')} {months[selectedMonth]}</h3>
             <div className="space-y-3">
               {topIncome ? (
                 <div className="flex items-center gap-4 p-4 bg-gray-50/30 rounded-2xl border border-gray-100/50">
@@ -577,10 +620,10 @@ const StatsScreen = ({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-gray-900 truncate">{topIncome.concept}</p>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Mayor ingreso</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{t('stats.incomeByCat')}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-primary font-numeric">+{topIncome.amount.toLocaleString()}€</p>
+                    <p className="font-bold text-primary font-numeric">{formatCurrency(topIncome.amount, currency, language)}</p>
                   </div>
                 </div>
               ) : null}
@@ -592,17 +635,17 @@ const StatsScreen = ({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-gray-900 truncate">{topExpense.concept}</p>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Mayor gasto</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{t('stats.expenseByCat')}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-secondary font-numeric">-{Math.abs(topExpense.amount).toLocaleString()}€</p>
+                    <p className="font-bold text-secondary font-numeric">{formatCurrency(topExpense.amount, currency, language)}</p>
                   </div>
                 </div>
               ) : null}
 
               {!topIncome && !topExpense && (
                 <div className="py-8 text-center bg-gray-50/30 rounded-2xl border border-dashed border-gray-200">
-                  <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Sin movimientos este mes</p>
+                  <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">{t('wallet.empty')}</p>
                 </div>
               )}
             </div>
@@ -634,7 +677,9 @@ const MovementsScreen = ({
   setSelectedMonth,
   selectedYear,
   setSelectedYear,
-  onAddMovement
+  onAddMovement,
+  currency = 'EUR',
+  language = 'es'
 }: { 
   setScreen: (s: AppScreen) => void, 
   movements: Movement[],
@@ -645,8 +690,11 @@ const MovementsScreen = ({
   setSelectedMonth: (m: number) => void,
   selectedYear: number,
   setSelectedYear: (y: number) => void,
-  onAddMovement: (type: 'income' | 'expense') => void
+  onAddMovement: (type: 'income' | 'expense') => void,
+  currency?: string,
+  language?: string
 }) => {
+  const { t } = useTranslation();
   const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const sliderRef = React.useRef<HTMLDivElement>(null);
   
@@ -674,8 +722,6 @@ const MovementsScreen = ({
   }, [selectedMonth]);
 
   const filteredMovements = movements.filter(m => {
-    // For now, our date format is "Ma. 12 May" or similar. 
-    // In a real app we'd use ISO dates. Let's assume the date string contains the month name.
     const monthName = months[selectedMonth];
     return m.date.includes(monthName);
   });
@@ -715,7 +761,7 @@ const MovementsScreen = ({
     const totalAmount = Math.abs(selectedMovForPayment.amount);
     
     if (otherPaidSum + paymentAmount > totalAmount) {
-      alert("El total de pagos no puede superar el importe del movimiento");
+      alert(t('payment.amountError'));
       return;
     }
 
@@ -730,7 +776,7 @@ const MovementsScreen = ({
       const newPayment: Payment = {
         id: Math.random().toString(36).substr(2, 9),
         amount: paymentAmount,
-        date: new Date().toLocaleDateString('es-ES'),
+        date: new Date().toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US'),
         method: paymentMethod,
         note: paymentNote
       };
@@ -754,7 +800,7 @@ const MovementsScreen = ({
   };
 
   const handleDeletePayment = (m: Movement, paymentId: string) => {
-    if (!confirm(`¿Seguro que quieres eliminar este ${m.type === 'income' ? 'cobro' : 'pago'}?`)) return;
+    if (!confirm(t('payment.deleteConfirm'))) return;
 
     const updatedPayments = (m.payments || []).filter(p => p.id !== paymentId);
     const updatedPaidAmount = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
@@ -779,9 +825,9 @@ const MovementsScreen = ({
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       amount: pending,
-      date: new Date().toLocaleDateString('es-ES'),
+      date: new Date().toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US'),
       method: 'Efectivo',
-      note: `Pago automático (Marcado como ${m.type === 'income' ? 'cobrado' : 'pagado'})`
+      note: t('payment.autoNote', { type: m.type === 'income' ? t('status.collected') : t('status.paid') })
     };
 
     const updatedMovement: Movement = {
@@ -797,13 +843,15 @@ const MovementsScreen = ({
   return (
     <div>
       <ScreenHeader 
-        title="Cartera" 
+        title={t('wallet.title')}
         showStats={true} 
         customStats={{
           balance: currentBalance,
           incomes: totalIncomes,
           expenses: totalExpenses
         }}
+        currency={currency}
+        language={language}
       />
       <ContentCard>
         <div className="max-w-2xl mx-auto space-y-6">
@@ -868,20 +916,20 @@ const MovementsScreen = ({
               className="flex-1 bg-brand-gradient text-white py-4 rounded-[1.25rem] font-bold flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
             >
               <PlusCircle size={20} />
-              <span className="text-sm">Ingreso</span>
+              <span className="text-sm">{t('movement.income')}</span>
             </button>
             <button 
               onClick={() => onAddMovement('expense')}
               className="flex-1 bg-secondary text-white py-4 rounded-[1.25rem] font-bold flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 hover:scale-[1.02] active:scale-95 transition-all"
             >
               <MinusCircle size={20} />
-              <span className="text-sm">Gasto</span>
+              <span className="text-sm">{t('movement.expense')}</span>
             </button>
           </div>
 
           <section>
             <div className="flex justify-between items-center mb-4 px-2">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Movimientos</h3>
+              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">{t('wallet.movements')}</h3>
               <Filter size={16} className="text-gray-300 pointer-events-none" />
             </div>
             
@@ -922,7 +970,7 @@ const MovementsScreen = ({
                             {item.concept}
                           </p>
                           {isPartial && (
-                            <span className="bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase">Parcial</span>
+                            <span className="bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase">{t('status.partial')}</span>
                           )}
                         </div>
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider opacity-70">
@@ -933,7 +981,7 @@ const MovementsScreen = ({
                       <div className="text-right flex items-center gap-4">
                         <div className="flex flex-col items-end">
                           <span className={`text-sm font-bold font-numeric ${isIncome ? 'text-primary' : 'text-secondary'}`}>
-                            {item.amount > 0 ? `+${item.amount}` : item.amount} €
+                            {formatCurrency(item.amount, item.currency || currency, language)}
                           </span>
                         </div>
                         <Edit2 size={16} className="text-gray-200 group-hover:text-primary transition-colors" />
@@ -945,16 +993,16 @@ const MovementsScreen = ({
                       <div className="px-4 pb-4 pt-1 space-y-3">
                         <div className="grid grid-cols-3 gap-2">
                           <div className="bg-gray-50 p-2 rounded-xl text-center">
-                            <p className="text-[8px] font-bold text-gray-400 uppercase">Total</p>
-                            <p className="text-[10px] font-bold text-gray-700">{Math.abs(item.amount)}€</p>
+                            <p className="text-[8px] font-bold text-gray-400 uppercase">{t('common.total')}</p>
+                            <p className="text-[10px] font-bold text-gray-700">{formatCurrency(Math.abs(item.amount), item.currency || currency, language)}</p>
                           </div>
                           <div className="bg-green-50 p-2 rounded-xl text-center">
-                            <p className="text-[8px] font-bold text-green-400 uppercase">{isIncome ? 'Cobrado' : 'Pagado'}</p>
-                            <p className="text-[10px] font-bold text-green-700">{paid}€</p>
+                            <p className="text-[8px] font-bold text-green-400 uppercase">{isIncome ? t('status.collected') : t('status.paid')}</p>
+                            <p className="text-[10px] font-bold text-green-700">{formatCurrency(paid, item.currency || currency, language)}</p>
                           </div>
                           <div className="bg-amber-50 p-2 rounded-xl text-center">
-                            <p className="text-[8px] font-bold text-amber-400 uppercase">Pendiente</p>
-                            <p className="text-[10px] font-bold text-amber-700">{pending}€</p>
+                            <p className="text-[8px] font-bold text-amber-400 uppercase">{t('status.pending')}</p>
+                            <p className="text-[10px] font-bold text-amber-700">{formatCurrency(pending, item.currency || currency, language)}</p>
                           </div>
                         </div>
 
@@ -977,7 +1025,7 @@ const MovementsScreen = ({
                             className="px-3 py-1.5 bg-primary/10 text-primary text-[10px] font-bold rounded-lg hover:bg-primary/20 transition-colors flex items-center gap-1.5"
                           >
                             <PlusCircle size={12} />
-                            {isIncome ? 'Registrar cobro' : 'Registrar pago'}
+                            {isIncome ? t('payment.registerIncome') : t('payment.registerExpense')}
                           </button>
                           <button 
                             onClick={(e) => {
@@ -987,7 +1035,7 @@ const MovementsScreen = ({
                             className="px-3 py-1.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1.5"
                           >
                             <Check size={12} />
-                            {isIncome ? 'Marcar cobrado' : 'Marcar pagado'}
+                            {isIncome ? t('payment.markCollected') : t('payment.markPaid')}
                           </button>
                           
                           {(item.payments?.length ?? 0) > 0 && (
@@ -999,7 +1047,7 @@ const MovementsScreen = ({
                               className="px-3 py-1.5 bg-gray-50 text-gray-400 text-[10px] font-bold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1.5"
                             >
                               <Receipt size={12} />
-                              {showPaymentsForId === item.id ? 'Ocultar pagos' : 'Ver pagos'}
+                              {showPaymentsForId === item.id ? t('common.hide') : t('payment.history')}
                             </button>
                           )}
                         </div>
@@ -1014,7 +1062,7 @@ const MovementsScreen = ({
                             {item.payments.map(p => (
                               <div key={p.id} className="flex justify-between items-center text-[10px] bg-white p-2 rounded-lg border border-gray-50 shadow-sm group/pay">
                                 <div>
-                                  <p className="font-bold text-gray-700">{p.amount}€ • {p.method}</p>
+                                  <p className="font-bold text-gray-700">{formatCurrency(p.amount, item.currency || currency, language)} • {p.method}</p>
                                   <p className="text-gray-400">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1055,7 +1103,7 @@ const MovementsScreen = ({
                           className="px-3 py-1.5 bg-gray-50 text-gray-400 text-[10px] font-bold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1.5"
                         >
                           <Receipt size={12} />
-                          {showPaymentsForId === item.id ? 'Ocultar historial' : 'Ver historial de pagos'}
+                          {showPaymentsForId === item.id ? t('common.hide') : t('payment.history')}
                         </button>
                         {showPaymentsForId === item.id && item.payments && (
                           <motion.div 
@@ -1066,7 +1114,7 @@ const MovementsScreen = ({
                             {item.payments.map(p => (
                               <div key={p.id} className="flex justify-between items-center text-[10px] bg-white p-2 rounded-lg border border-gray-50 shadow-sm group/pay">
                                 <div>
-                                  <p className="font-bold text-gray-700">{p.amount}€ • {p.method}</p>
+                                  <p className="font-bold text-gray-700">{formatCurrency(p.amount, item.currency || currency, language)} • {p.method}</p>
                                   <p className="text-gray-400">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1099,7 +1147,7 @@ const MovementsScreen = ({
                 );
               }) : (
                 <div className="py-12 text-center">
-                  <p className="text-gray-300 text-xs font-bold uppercase tracking-widest">No hay movimientos este mes</p>
+                  <p className="text-gray-300 text-xs font-bold uppercase tracking-widest">{t('wallet.empty')}</p>
                 </div>
               )}
             </div>
@@ -1127,8 +1175,8 @@ const MovementsScreen = ({
             <div className="mb-6 text-center">
               <h3 className="text-lg font-bold text-gray-900">
                 {editingPaymentId 
-                  ? (selectedMovForPayment?.type === 'income' ? 'Editar Cobro' : 'Editar Pago')
-                  : (selectedMovForPayment?.type === 'income' ? 'Registrar Cobro' : 'Registrar Pago')
+                  ? (selectedMovForPayment?.type === 'income' ? t('payment.editIncome') : t('payment.editExpense'))
+                  : (selectedMovForPayment?.type === 'income' ? t('payment.registerIncome') : t('payment.registerExpense'))
                 }
               </h3>
               <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
@@ -1138,9 +1186,11 @@ const MovementsScreen = ({
 
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Importe</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('common.amount')}</label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-300">€</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-300">
+                    {getCurrencySymbol(selectedMovForPayment?.currency || currency)}
+                  </span>
                   <input 
                     type="number" 
                     value={paymentAmount}
@@ -1151,7 +1201,7 @@ const MovementsScreen = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Método</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('common.method')}</label>
                 <div className="relative">
                   <select 
                     value={paymentMethod}
@@ -1167,12 +1217,12 @@ const MovementsScreen = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Nota (opcional)</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('common.note')} ({t('common.optional')})</label>
                 <input 
                   type="text" 
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
-                  placeholder="Ej: Pago adelantado"
+                  placeholder={t('payment.notePlaceholder')}
                   className="w-full bg-gray-50 border-none rounded-2xl px-4 py-3.5 text-sm font-medium outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all placeholder:text-gray-300"
                 />
               </div>
@@ -1180,16 +1230,19 @@ const MovementsScreen = ({
 
             <div className="flex gap-3 mt-10">
               <button 
-                onClick={() => setPaymentModalOpen(false)}
+                onClick={() => {
+                  setPaymentModalOpen(false);
+                  setEditingPaymentId(null);
+                }}
                 className="flex-1 py-4 text-sm font-bold text-gray-400 hover:bg-gray-50 rounded-2xl transition-colors"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button 
                 onClick={handleSavePayment}
                 className="flex-2 py-4 bg-brand-gradient text-white text-sm font-bold rounded-2xl shadow-lg shadow-primary/20"
               >
-                Guardar pago
+                {t('common.save')}
               </button>
             </div>
           </motion.div>
@@ -1202,12 +1255,17 @@ const MovementsScreen = ({
 const PendingItem = ({ 
   item, 
   onToggleStatus, 
-  onClick 
+  onClick,
+  currency = 'EUR',
+  language = 'es'
 }: { 
   item: Movement, 
   onToggleStatus: (id: string) => void,
-  onClick: () => void 
+  onClick: () => void,
+  currency?: string,
+  language?: string
 }) => {
+  const { t } = useTranslation();
   const isCompleted = isMovementFullyCompleted(item);
   const paid = getMovementPaidAmount(item);
   const pending = getMovementPendingAmount(item);
@@ -1235,7 +1293,7 @@ const PendingItem = ({
         <div className="flex items-center gap-2">
           <p className="text-xs font-bold text-gray-900 truncate">{item.concept}</p>
           {isPartial && (
-            <span className="bg-amber-100 text-amber-700 text-[7px] font-bold px-1 py-0.5 rounded-full uppercase">Parcial</span>
+            <span className="bg-amber-100 text-amber-700 text-[7px] font-bold px-1 py-0.5 rounded-full uppercase">{t('status.partial')}</span>
           )}
         </div>
         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{item.date}</p>
@@ -1243,11 +1301,11 @@ const PendingItem = ({
       <div className="flex items-center gap-2">
         <div className="text-right">
           <span className={`text-xs font-bold font-numeric block ${item.type === 'income' ? 'text-primary' : 'text-secondary'}`}>
-            {item.amount > 0 ? `+${item.amount}` : item.amount} €
+            {formatCurrency(item.amount, item.currency || currency, language)}
           </span>
           {paid > 0 && pending > 0 && (
             <span className="text-[8px] font-bold text-gray-400 block -mt-1">
-              Falta {pending}€
+              {t('status.pending')}: {formatCurrency(pending, item.currency || currency, language)}
             </span>
           )}
         </div>
@@ -1261,13 +1319,18 @@ const SummaryScreen = ({
   movements, 
   onToggleStatus, 
   setScreen,
-  setSelectedMovementId
+  setSelectedMovementId,
+  currency = 'EUR',
+  language = 'es'
 }: { 
   movements: Movement[], 
   onToggleStatus: (id: string) => void,
   setScreen: (s: AppScreen) => void,
-  setSelectedMovementId: (id: string) => void
+  setSelectedMovementId: (id: string) => void,
+  currency?: string,
+  language?: string
 }) => {
+  const { t } = useTranslation();
   const [expandedType, setExpandedType] = React.useState<'income' | 'expense' | null>(null);
 
   const pendingIncomes = movements.filter(m => m.type === 'income' && !isMovementFullyCompleted(m));
@@ -1282,15 +1345,15 @@ const SummaryScreen = ({
 
   return (
     <div>
-      <ScreenHeader title="Resumen" />
+      <ScreenHeader title={t('summary.title')} currency={currency} language={language} />
       <ContentCard>
         <div className="max-w-4xl mx-auto space-y-10">
           <section>
             <div className="bg-brand-gradient text-white rounded-[2rem] p-8 relative overflow-hidden flex justify-between items-end shadow-2xl shadow-primary/20">
               <div className="relative z-10">
-                <p className="text-[10px] font-bold tracking-[0.2em] opacity-70 uppercase mb-3">Balance Histórico 2026</p>
+                <p className="text-[10px] font-bold tracking-[0.2em] opacity-70 uppercase mb-3">{t('summary.globalBalance')} 2026</p>
                 <h2 className="text-4xl font-bold tracking-tight font-numeric">
-                  {historicalBalance >= 0 ? `+ ${historicalBalance.toLocaleString()}` : `- ${Math.abs(historicalBalance).toLocaleString()}`} €
+                  {formatCurrency(historicalBalance, currency, language)}
                 </h2>
               </div>
               <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md relative z-10">
@@ -1305,8 +1368,8 @@ const SummaryScreen = ({
             <Card className="border-none bg-gray-50/50 p-7 group hover:bg-white hover:shadow-2xl transition-all duration-500 rounded-[2rem]">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 opacity-60">Ingresos Totales</p>
-                  <p className="text-3xl font-bold text-primary tracking-tight font-numeric">{totalIncomes.toLocaleString()} €</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 opacity-60">{t('summary.totalIncomes')}</p>
+                  <p className="text-3xl font-bold text-primary tracking-tight font-numeric">{formatCurrency(totalIncomes, currency, language)}</p>
                 </div>
                 <div className="p-2.5 bg-primary/10 rounded-xl text-primary">
                   <TrendingUp size={20} />
@@ -1324,8 +1387,8 @@ const SummaryScreen = ({
             <Card className="border-none bg-gray-50/50 p-7 group hover:bg-white hover:shadow-2xl transition-all duration-500 rounded-[2rem]">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 opacity-60">Gastos Totales</p>
-                  <p className="text-3xl font-bold text-secondary tracking-tight font-numeric">{totalExpenses.toLocaleString()} €</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 opacity-60">{t('summary.totalExpenses')}</p>
+                  <p className="text-3xl font-bold text-secondary tracking-tight font-numeric">{formatCurrency(totalExpenses, currency, language)}</p>
                 </div>
                 <div className="p-2.5 bg-secondary/10 rounded-xl text-secondary">
                   <TrendingDown size={20} />
@@ -1343,7 +1406,7 @@ const SummaryScreen = ({
 
           {/* New Pendientes Section */}
           <section className="space-y-4">
-            <h3 className="text-sm font-bold text-gray-900 tracking-tight px-1">Pendientes</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-tight px-1">{t('summary.pending')}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <button 
@@ -1357,8 +1420,8 @@ const SummaryScreen = ({
                       <Hourglass size={18} />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Pendiente de cobro</p>
-                      <p className="text-lg font-bold text-primary font-numeric">+{totalPendingIncome.toLocaleString()} €</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">{t('summary.pendingIncome')}</p>
+                      <p className="text-lg font-bold text-primary font-numeric">{formatCurrency(totalPendingIncome, currency, language)}</p>
                     </div>
                   </div>
                   <ChevronDown size={20} className={`text-gray-300 transition-transform ${expandedType === 'income' ? 'rotate-180' : ''}`} />
@@ -1376,6 +1439,8 @@ const SummaryScreen = ({
                           <PendingItem 
                             item={item} 
                             onToggleStatus={onToggleStatus}
+                            currency={currency}
+                            language={language}
                             onClick={() => {
                               setSelectedMovementId(item.id);
                               setScreen('edit-movement');
@@ -1384,7 +1449,7 @@ const SummaryScreen = ({
                         </React.Fragment>
                       ))
                     ) : (
-                      <p className="py-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">No hay cobros pendientes</p>
+                      <p className="py-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">{t('summary.noPendingIncomes')}</p>
                     )}
                   </motion.div>
                 )}
@@ -1402,8 +1467,8 @@ const SummaryScreen = ({
                       <Clock size={18} />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Pendiente de pago</p>
-                      <p className="text-lg font-bold text-secondary font-numeric">-{totalPendingExpense.toLocaleString()} €</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">{t('summary.pendingExpense')}</p>
+                      <p className="text-lg font-bold text-secondary font-numeric">{formatCurrency(totalPendingExpense, currency, language)}</p>
                     </div>
                   </div>
                   <ChevronDown size={20} className={`text-gray-300 transition-transform ${expandedType === 'expense' ? 'rotate-180' : ''}`} />
@@ -1421,6 +1486,8 @@ const SummaryScreen = ({
                           <PendingItem 
                             item={item} 
                             onToggleStatus={onToggleStatus}
+                            currency={currency}
+                            language={language}
                             onClick={() => {
                               setSelectedMovementId(item.id);
                               setScreen('edit-movement');
@@ -1429,7 +1496,7 @@ const SummaryScreen = ({
                         </React.Fragment>
                       ))
                     ) : (
-                      <p className="py-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">No hay pagos pendientes</p>
+                      <p className="py-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">{t('summary.noPendingExpenses')}</p>
                     )}
                   </motion.div>
                 )}
@@ -1439,20 +1506,55 @@ const SummaryScreen = ({
 
           <section>
             <div className="flex justify-between items-center mb-6 px-1">
-              <h3 className="text-sm font-bold text-gray-900 tracking-tight">Desglose por Trimestres</h3>
+              <h3 className="text-sm font-bold text-gray-900 tracking-tight">{t('summary.quarterBreakdown')}</h3>
               <Calendar size={18} className="text-gray-300" />
             </div>
             <div className="grid grid-cols-1 gap-4">
               {[
-                { q: 'Q1 - Ene-Mar', a: 12400, color: 'bg-primary/5 text-primary' },
-                { q: 'Q2 - Abr-Jun', a: 15200, color: 'bg-brand-gradient text-white shadow-lg' },
-                { q: 'Q3 - Jul-Sep', a: 14250, color: 'bg-gray-50 text-gray-400' }
-              ].map((q, i) => (
-                <div key={i} className={`p-5 rounded-2xl flex justify-between items-center transition-all ${q.color}`}>
-                  <span className="text-sm font-bold">{q.q}</span>
-                  <span className="font-bold font-numeric">+{q.a.toLocaleString()} €</span>
-                </div>
-              ))}
+                { label: t('summary.q1'), num: 1 },
+                { label: t('summary.q2'), num: 2 },
+                { label: t('summary.q3'), num: 3 },
+                { label: t('summary.q4'), num: 4 },
+              ].map((q) => {
+                const monthMap: Record<string, number> = {
+                  'Ene': 0, 'Feb': 1, 'Mar': 2, 'Abr': 3, 'May': 4, 'Jun': 5,
+                  'Jul': 6, 'Ago': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dic': 11,
+                  'Jan': 0, 'Apr': 3, 'Aug': 7, 'Dec': 11
+                };
+
+                const minMonth = (q.num - 1) * 3;
+                const maxMonth = minMonth + 2;
+
+                const quarterMovements = movements.filter(m => {
+                  const parts = m.date.split(' ');
+                  const monthAbbr = parts[parts.length - 1];
+                  const monthIndex = monthMap[monthAbbr];
+                  return monthIndex >= minMonth && monthIndex <= maxMonth;
+                });
+
+                const income = quarterMovements
+                  .filter(m => m.type === 'income')
+                  .reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
+                
+                const expense = quarterMovements
+                  .filter(m => m.type === 'expense')
+                  .reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
+
+                const balance = income - expense;
+                
+                let bgColor = 'bg-gray-50/50 text-gray-400';
+                if (balance > 0) bgColor = 'bg-primary/5 text-primary';
+                if (balance < 0) bgColor = 'bg-secondary/5 text-secondary';
+
+                return (
+                  <div key={q.num} className={`p-5 rounded-2xl flex justify-between items-center transition-all ${bgColor}`}>
+                    <span className="text-sm font-bold">{q.label}</span>
+                    <span className="font-bold font-numeric">
+                      {balance > 0 ? '+' : ''}{formatCurrency(balance, currency, language)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </section>
         </div>
@@ -1461,7 +1563,21 @@ const SummaryScreen = ({
   );
 };
 
-const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movement, onBack: () => void, profile: ProfileData }) => {
+const ReceiptPreviewScreen = ({ 
+  movement, 
+  onBack, 
+  profile,
+  currency = 'EUR',
+  language = 'es'
+}: { 
+  movement: Movement, 
+  onBack: () => void, 
+  profile: ProfileData,
+  currency?: string,
+  language?: string
+}) => {
+  const { t } = useTranslation();
+  
   const downloadPDF = () => {
     try {
       const doc = new jsPDF({
@@ -1508,12 +1624,12 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       doc.setFontSize(28);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-      doc.text("RECIBO", 105, 50, { align: "center" });
+      doc.text(t('receipt.title').toUpperCase(), 105, 50, { align: "center" });
 
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
-      doc.text(`#000${movement.id.slice(0, 5).toUpperCase()}`, 105, 58, { align: "center" });
+      doc.text(`#${t('receipt.number')}000${movement.id.slice(0, 5).toUpperCase()}`, 105, 58, { align: "center" });
       
       doc.setFontSize(11);
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
@@ -1527,8 +1643,8 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      doc.text("DE:", 20, 90);
-      doc.text("PARA:", 110, 90);
+      doc.text(`${t('receipt.from').toUpperCase()}:`, 20, 90);
+      doc.text(`${t('receipt.to').toUpperCase()}:`, 110, 90);
 
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
       doc.setFontSize(12);
@@ -1540,7 +1656,7 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
       doc.text(profile.businessName || profile.jobType, 20, 104);
       doc.text(profile.email, 20, 110);
-      doc.text("Cliente / Concepto principal", 110, 104);
+      doc.text(t('receipt.clientSub'), 110, 104);
 
       // Separator
       doc.line(20, 125, 190, 125);
@@ -1549,7 +1665,7 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      doc.text("CONCEPTO:", 20, 140);
+      doc.text(`${t('movement.conceptLabel').toUpperCase()}:`, 20, 140);
       
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
       doc.setFontSize(13);
@@ -1558,12 +1674,12 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      doc.text("DETALLE:", 20, 160);
+      doc.text(`${t('receipt.detail').toUpperCase()}:`, 20, 160);
 
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
-      const notes = movement.notes || "Sin especificaciones adicionales.";
+      const notes = movement.notes || t('movement.noNotes');
       const splitNotes = doc.splitTextToSize(notes, 160);
       doc.text(splitNotes, 20, 168);
 
@@ -1583,56 +1699,58 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
       
       if (isPartial) {
-        doc.text("DESGLOSE DE PAGO", 105, 195, { align: "center" });
+        doc.text(t('receipt.breakdown').toUpperCase(), 105, 195, { align: "center" });
         
         doc.setFontSize(9);
         doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
-        doc.text(`Total: ${absAmount},00 €`, 105, 202, { align: "center" });
+        doc.text(`${t('common.total')}: ${formatCurrency(absAmount, movement.currency || currency, language)}`, 105, 202, { align: "center" });
         
         doc.setFontSize(11);
         doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        doc.text(`${isExpense ? 'Pagado' : 'Cobrado'}: ${paidAmount},00 €`, 105, 210, { align: "center" });
+        doc.text(`${isExpense ? t('status.paid') : t('status.collected')}: ${formatCurrency(paidAmount, movement.currency || currency, language)}`, 105, 210, { align: "center" });
         
         doc.setFontSize(14);
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        doc.text(`PENDIENTE: ${pendingAmount},00 €`, 105, 220, { align: "center" });
+        doc.text(`${t('status.pending').toUpperCase()}: ${formatCurrency(pendingAmount, movement.currency || currency, language)}`, 105, 220, { align: "center" });
       } else {
-        doc.text("TOTAL", 105, 205, { align: "center" });
+        doc.text(t('common.total').toUpperCase(), 105, 205, { align: "center" });
         doc.setFontSize(42);
         if (isExpense) {
           doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
         } else {
           doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
         }
-        doc.text(`${absAmount},00 €`, 105, 222, { align: "center" });
+        doc.text(`${formatCurrency(absAmount, movement.currency || currency, language)}`, 105, 222, { align: "center" });
       }
 
       // 5. ESTADO
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
+      const stateLabel = t('common.status');
       if (isCompleted) {
         doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        doc.text(`Estado: ${isExpense ? 'PAGADO' : 'COBRADO'}`, 105, 235, { align: "center" });
+        doc.text(`${stateLabel}: ${isExpense ? t('status.paid').toUpperCase() : t('status.collected').toUpperCase()}`, 105, 235, { align: "center" });
       } else if (isPartial) {
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        doc.text("Estado: PARCIAL", 105, 235, { align: "center" });
+        doc.text(`${stateLabel}: ${t('status.partial').toUpperCase()}`, 105, 235, { align: "center" });
       } else {
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        doc.text("Estado: PENDIENTE", 105, 235, { align: "center" });
+        doc.text(`${stateLabel}: ${t('status.pending').toUpperCase()}`, 105, 235, { align: "center" });
       }
 
       // 6. HISTORIAL DE PAGOS (Si existen)
       if (movement.payments && movement.payments.length > 0) {
         doc.setFontSize(10);
         doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        doc.text(`${isExpense ? 'Pagos' : 'Cobros'} realizados:`, 20, 250);
+        doc.text(`${isExpense ? t('movement.paymentsDone') : t('movement.incomesReceived')}:`, 20, 250);
         
         doc.setFontSize(8);
         doc.setTextColor(textColor[0], textColor[1], textColor[2]);
         let currentY = 258;
         movement.payments.forEach((p) => {
           if (currentY > 275) return; // Prevent overflow for now
-          doc.text(`${p.date} - ${p.method}: ${p.amount}€ ${p.note ? `(${p.note})` : ''}`, 20, currentY);
+          const paymentLine = `${p.date} - ${p.method === 'Efectivo' ? t('payment.cash') : t('payment.card')}: ${formatCurrency(p.amount, movement.currency || currency, language)} ${p.note ? `(${p.note})` : ''}`;
+          doc.text(paymentLine, 20, currentY);
           currentY += 5;
         });
       }
@@ -1641,22 +1759,23 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
-      doc.text("Generado con Trackly", 105, 285, { align: "center" });
+      doc.text(t('receipt.generatedWith'), 105, 285, { align: "center" });
 
       // Filename
       const safeDate = movement.date.replace(/[^a-z0-9]/gi, '_');
-      const fileName = `trackly-recibo-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${safeDate}.pdf`;
+      const prefix = t('receipt.filenamePrefix');
+      const fileName = `${prefix}-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${safeDate}.pdf`;
       doc.save(fileName);
-      alert("Recibo descargado");
+      alert(t('receipt.downloaded'));
     } catch (error) {
       console.error(error);
-      alert("No se pudo generar el recibo");
+      alert(t('receipt.error'));
     }
   };
 
   return (
     <div className="bg-background min-h-screen">
-      <ScreenHeader title="Vista previa de recibo" onBack={onBack} />
+      <ScreenHeader title={t('receipt.previewTitle')} onBack={onBack} currency={currency} language={language} />
       <ContentCard className="flex flex-col items-center">
         <div className="w-full max-w-md bg-white border border-gray-100 rounded-3xl shadow-xl overflow-hidden mb-10 relative">
           {/* Receipt Top Decorative Edge */}
@@ -1669,36 +1788,36 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
                 <div className="mb-2">
                   <TracklyLogoComp variant="dark" size="sm" />
                 </div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">RECIBO</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('receipt.title')}</span>
               </div>
-              <div className="text-right">
-                <p className="text-xs font-bold text-gray-900">#000{movement.id}23</p>
-                <p className="text-[10px] font-bold text-gray-400">{movement.date}</p>
+              <div className="text-right font-sans">
+                <p className="text-xs font-bold text-gray-900 font-sans">#{t('receipt.number')}000{movement.id.slice(0, 5)}</p>
+                <p className="text-[10px] font-bold text-gray-400 font-sans">{movement.date}</p>
               </div>
             </div>
 
             {/* Parties Section */}
             <div className="grid grid-cols-2 gap-6 py-6 border-y border-gray-50 mb-6 font-sans">
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">DE:</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{t('receipt.from').toUpperCase()}:</p>
                 <p className="text-sm font-bold text-gray-900 leading-tight">{profile.fullName}</p>
-                <p className="text-[10px] font-bold text-gray-400 opacity-70">{profile.businessName || profile.jobType}</p>
+                <p className="text-[10px] font-bold text-gray-400 opacity-70 font-sans">{profile.businessName || profile.jobType}</p>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">PARA:</p>
-                <p className="text-sm font-bold text-gray-900 leading-tight">{movement.concept}</p>
+              <div className="text-right font-sans">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{t('receipt.to').toUpperCase()}:</p>
+                <p className="text-sm font-bold text-gray-900 leading-tight font-sans">{movement.concept}</p>
               </div>
             </div>
 
             {/* Concept/Details */}
-            <div className="mb-10">
+            <div className="mb-10 font-sans">
               <div className="mb-4">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">CONCEPTO</p>
-                <p className="text-base font-bold text-gray-900">{movement.concept}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 font-sans">{t('movement.conceptLabel').toUpperCase()}</p>
+                <p className="text-base font-bold text-gray-900 font-sans">{movement.concept}</p>
               </div>
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100 italic">
-                <p className="text-xs text-gray-500 leading-relaxed text-center">
-                  {movement.notes || "Sin notas adicionales para este movimiento."}
+                <p className="text-xs text-gray-500 leading-relaxed text-center font-sans">
+                  {movement.notes || t('movement.noNotes')}
                 </p>
               </div>
             </div>
@@ -1714,10 +1833,10 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
               }`}>
                 {isMovementFullyCompleted(movement) ? <Check size={14} strokeWidth={3} /> : <Clock size={14} strokeWidth={3} />}
                 <span className="text-[10px] font-bold uppercase tracking-widest">
-                  ESTADO: {
+                  {t('common.status').toUpperCase()}: {
                     isMovementFullyCompleted(movement) 
-                      ? (movement.type === 'income' ? 'COBRADO' : 'PAGADO')
-                      : isMovementPartiallyCompleted(movement) ? 'PARCIAL' : 'PENDIENTE'
+                      ? (movement.type === 'income' ? t('status.collected').toUpperCase() : t('status.paid').toUpperCase())
+                      : isMovementPartiallyCompleted(movement) ? t('status.partial').toUpperCase() : t('status.pending').toUpperCase()
                   }
                 </span>
               </div>
@@ -1726,19 +1845,19 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
             {/* Total Amount Section */}
             <div className="flex flex-col items-center py-8 border-t border-dashed border-gray-100">
               {isMovementPartiallyCompleted(movement) ? (
-                <div className="w-full space-y-4">
+                <div className="w-full space-y-4 font-sans">
                   <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center">
-                      <p className="text-[8px] font-bold text-gray-400 uppercase">Total</p>
-                      <p className="text-sm font-bold text-gray-900">{Math.abs(movement.amount)}€</p>
+                    <div className="text-center font-sans">
+                      <p className="text-[8px] font-bold text-gray-400 uppercase font-sans">{t('common.total')}</p>
+                      <p className="text-sm font-bold text-gray-900 font-sans">{formatCurrency(Math.abs(movement.amount), movement.currency || currency, language)}</p>
                     </div>
-                    <div className="text-center">
-                      <p className="text-[8px] font-bold text-primary uppercase">{movement.type === 'income' ? 'Cobrado' : 'Pagado'}</p>
-                      <p className="text-sm font-bold text-primary">{getMovementPaidAmount(movement)}€</p>
+                    <div className="text-center font-sans">
+                      <p className="text-[8px] font-bold text-primary uppercase font-sans">{movement.type === 'income' ? t('status.collected') : t('status.paid')}</p>
+                      <p className="text-sm font-bold text-primary font-sans">{formatCurrency(getMovementPaidAmount(movement), movement.currency || currency, language)}</p>
                     </div>
-                    <div className="text-center">
-                      <p className="text-[8px] font-bold text-secondary uppercase">Pendiente</p>
-                      <p className="text-sm font-bold text-secondary">{getMovementPendingAmount(movement)}€</p>
+                    <div className="text-center font-sans">
+                      <p className="text-[8px] font-bold text-secondary uppercase font-sans">{t('status.pending')}</p>
+                      <p className="text-sm font-bold text-secondary font-sans">{formatCurrency(getMovementPendingAmount(movement), movement.currency || currency, language)}</p>
                     </div>
                   </div>
                   <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -1747,9 +1866,9 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
                 </div>
               ) : (
                 <>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Total del Recibo</span>
-                  <h2 className={`text-4xl font-bold font-numeric ${movement.type === 'income' ? 'text-primary' : 'text-secondary'}`}>
-                    {Math.abs(movement.amount)},00 €
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 font-sans">{t('receipt.totalLabel')}</span>
+                  <h2 className={`text-4xl font-bold font-numeric font-sans ${movement.type === 'income' ? 'text-primary' : 'text-secondary'}`}>
+                    {formatCurrency(Math.abs(movement.amount), movement.currency || currency, language)}
                   </h2>
                 </>
               )}
@@ -1757,14 +1876,14 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
 
             {/* Payments List if any */}
             {(movement.payments?.length ?? 0) > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-50">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">{movement.type === 'income' ? 'Cobros' : 'Pagos'} realizados</p>
-                <div className="space-y-2">
+              <div className="mt-4 pt-4 border-t border-gray-50 font-sans">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 font-sans">{movement.type === 'income' ? t('movement.incomesReceived') : t('movement.paymentsDone')}</p>
+                <div className="space-y-2 font-sans">
                   {movement.payments?.map(p => (
-                    <div key={p.id} className="flex justify-between items-center text-[10px] bg-gray-50 p-3 rounded-xl border border-gray-100">
-                      <div>
-                        <p className="font-bold text-gray-700">{p.amount}€ • {p.method}</p>
-                        <p className="text-gray-400 font-medium">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
+                    <div key={p.id} className="flex justify-between items-center text-[10px] bg-gray-50 p-3 rounded-xl border border-gray-100 font-sans">
+                      <div className="font-sans">
+                        <p className="font-bold text-gray-700 font-sans">{formatCurrency(p.amount, movement.currency || currency, language)} • {p.method === 'Efectivo' ? t('payment.cash') : t('payment.card')}</p>
+                        <p className="text-gray-400 font-medium font-sans">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
                       </div>
                       <div className="w-2 h-2 rounded-full bg-green-500" />
                     </div>
@@ -1775,7 +1894,7 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
 
             {/* Receipt Footer */}
             <div className="mt-4 text-center">
-              <p className="text-[9px] font-bold text-gray-300 uppercase tracking-[0.2em]">Generado con Trackly</p>
+              <p className="text-[9px] font-bold text-gray-300 uppercase tracking-[0.2em] font-sans">{t('receipt.generatedWith')}</p>
             </div>
           </div>
         </div>
@@ -1784,19 +1903,19 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
         <div className="w-full max-w-md space-y-4 px-2">
           <button 
             onClick={downloadPDF}
-            className="w-full py-5 bg-primary text-white rounded-[1.75rem] text-base font-bold shadow-2xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
+            className="w-full py-5 bg-primary text-white rounded-[1.75rem] text-base font-bold shadow-2xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all font-sans"
           >
-            Descargar PDF
+            {t('receipt.downloadPDF')}
           </button>
-          <button className="w-full py-5 border-2 border-primary/20 text-primary rounded-[1.75rem] text-base font-bold bg-white hover:bg-gray-50 active:scale-95 transition-all">
-            Compartir
+          <button className="w-full py-5 border-2 border-primary/20 text-primary rounded-[1.75rem] text-base font-bold bg-white hover:bg-gray-50 active:scale-95 transition-all font-sans">
+            {t('common.share')}
           </button>
           <div className="flex justify-center pt-4">
             <button 
               onClick={onBack}
-              className="text-gray-400 font-bold text-[11px] uppercase tracking-widest hover:text-gray-600 transition-colors py-2"
+              className="text-gray-400 font-bold text-[11px] uppercase tracking-widest hover:text-gray-600 transition-colors py-2 font-sans"
             >
-              Volver a detalles
+              {t('receipt.backToDetails')}
             </button>
           </div>
         </div>
@@ -1816,6 +1935,7 @@ const ProfileScreen = ({
   onSave: () => void,
   movements: Movement[]
 }) => {
+  const { t, i18n } = useTranslation();
   const [showPhotoMenu, setShowPhotoMenu] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
@@ -1834,15 +1954,21 @@ const ProfileScreen = ({
         setProfile(prev => ({ ...prev, profilePic: optimized }));
       } catch (err) {
         console.error("Error optimizing image:", err);
-        alert("Error al procesar la imagen");
+        alert(t('common.error'));
       }
     }
     setShowPhotoMenu(false);
   };
 
+  const changeLanguage = (lang: string) => {
+    i18n.changeLanguage(lang);
+    setProfile(p => ({ ...p, language: lang }));
+    localStorage.setItem('trackly_language', lang);
+  };
+
   return (
     <div className="bg-background min-h-screen">
-      <ScreenHeader title="Mi Perfil" />
+      <ScreenHeader title={t('profile.title')} />
       <ContentCard>
         <div className="max-w-2xl mx-auto space-y-6">
           {/* Profile Header Card */}
@@ -1902,8 +2028,8 @@ const ProfileScreen = ({
                   onClick={e => e.stopPropagation()}
                 >
                   <div className="p-4 border-b border-gray-100 text-center">
-                    <h3 className="text-sm font-bold text-gray-900">Actualizar foto</h3>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Elige una opción</p>
+                    <h3 className="text-sm font-bold text-gray-900">{t('profile.updatePhoto')}</h3>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{t('profile.chooseOption')}</p>
                   </div>
                   <div className="p-2 space-y-1">
                     <button 
@@ -1911,21 +2037,21 @@ const ProfileScreen = ({
                       className="w-full py-4 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded-2xl flex items-center justify-center gap-3 transition-colors"
                     >
                       <Camera size={18} className="text-primary" />
-                      Tomar foto
+                      {t('profile.takePhoto')}
                     </button>
                     <button 
                       onClick={() => fileInputRef.current?.click()}
                       className="w-full py-4 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded-2xl flex items-center justify-center gap-3 transition-colors"
                     >
                       <Receipt size={18} className="text-primary" />
-                      Elegir de galería
+                      {t('profile.chooseGallery')}
                     </button>
                     <div className="h-px bg-gray-100 mx-4 my-1" />
                     <button 
                       onClick={() => setShowPhotoMenu(false)}
                       className="w-full py-4 text-sm font-bold text-secondary hover:bg-gray-50 rounded-2xl transition-colors"
                     >
-                      Cancelar
+                      {t('common.cancel')}
                     </button>
                   </div>
                 </motion.div>
@@ -1935,10 +2061,10 @@ const ProfileScreen = ({
 
           {/* Section: Datos Básicos */}
           <section className="space-y-4">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">Datos Básicos</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">{t('profile.basicData')}</h3>
             <Card className="space-y-5 border-none bg-gray-50/50">
               <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">Nombre completo</label>
+                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('profile.fullName')}</label>
                 <input 
                   type="text" 
                   value={profile.fullName}
@@ -1954,7 +2080,7 @@ const ProfileScreen = ({
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">Registro</label>
+                  <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('profile.registration')}</label>
                   <div className="w-full bg-white/50 border border-gray-100 rounded-2xl px-4 py-3.5 text-[11px] font-bold text-gray-400">
                     {profile.registrationDate}
                   </div>
@@ -1965,26 +2091,26 @@ const ProfileScreen = ({
 
           {/* Section: Información Profesional */}
           <section className="space-y-4">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">Información Profesional</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">{t('profile.proInfo')}</h3>
             <Card className="space-y-5 border-none bg-gray-50/50">
               <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">Tipo de Trabajo</label>
+                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('profile.jobType')}</label>
                 <div className="relative">
                   <select 
                     value={profile.jobType}
                     onChange={(e) => setProfile(p => ({ ...p, jobType: e.target.value }))}
                     className="w-full appearance-none bg-white border border-gray-100 rounded-2xl px-4 py-3.5 text-sm font-bold text-gray-900 focus:ring-4 ring-primary/5 outline-none transition-all"
                   >
-                    <option>Jardinería</option>
-                    <option>Electricidad</option>
-                    <option>Fontanería</option>
-                    <option>Carpintería</option>
+                    <option value="Jardinería">{t('jobs.gardening')}</option>
+                    <option value="Electricidad">{t('jobs.electricity')}</option>
+                    <option value="Fontanería">{t('jobs.plumbing')}</option>
+                    <option value="Carpintería">{t('jobs.carpentry')}</option>
                   </select>
                   <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">Nombre del Negocio</label>
+                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('profile.businessName')}</label>
                 <input 
                   type="text" 
                   value={profile.businessName}
@@ -1993,7 +2119,7 @@ const ProfileScreen = ({
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">Trabaja como</label>
+                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('profile.workAs')}</label>
                 <div className="flex bg-white/50 p-1 rounded-2xl border border-gray-100 gap-1">
                   {(['Autónomo', 'Empresa', 'Particular'] as const).map(type => (
                     <button 
@@ -2003,7 +2129,7 @@ const ProfileScreen = ({
                         profile.employmentType === type ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-gray-400 hover:text-gray-600'
                       }`}
                     >
-                      {type}
+                      {t(`employment.${type.toLowerCase()}`)}
                     </button>
                   ))}
                 </div>
@@ -2013,13 +2139,13 @@ const ProfileScreen = ({
 
           {/* Section: Actividad */}
           <section className="space-y-4">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">Actividad</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">{t('profile.activity')}</h3>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'Total movimientos', val: stats.total.toString(), color: 'text-gray-900' },
-                { label: 'Ingresos', val: stats.incomes.toString(), color: 'text-primary' },
-                { label: 'Gastos', val: stats.expenses.toString(), color: 'text-secondary' },
-                { label: 'Último acceso', val: profile.lastAccess, color: 'text-gray-900' },
+                { label: t('profile.totalMovements'), val: stats.total.toString(), color: 'text-gray-900' },
+                { label: t('summary.totalIncomes'), val: stats.incomes.toString(), color: 'text-primary' },
+                { label: t('summary.totalExpenses'), val: stats.expenses.toString(), color: 'text-secondary' },
+                { label: t('profile.lastAccess'), val: profile.lastAccess, color: 'text-gray-900' },
               ].map((stat, i) => (
                 <div key={i} className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100/50">
                   <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-1">{stat.label}</span>
@@ -2031,12 +2157,12 @@ const ProfileScreen = ({
 
           {/* Section: Preferencias */}
           <section className="space-y-4">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">Preferencias</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">{t('profile.preferences')}</h3>
             <Card className="space-y-6 border-none bg-gray-50/50">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-sm font-bold text-gray-900 block mb-0.5">Backup automático</span>
-                  <span className="text-[10px] font-medium text-gray-400">Protege tus datos en la nube</span>
+                  <span className="text-sm font-bold text-gray-900 block mb-0.5">{t('profile.autoBackup')}</span>
+                  <span className="text-[10px] font-medium text-gray-400">{t('profile.autoBackupDesc')}</span>
                 </div>
                 <div 
                   onClick={() => setProfile(p => ({ ...p, autoBackup: !p.autoBackup }))}
@@ -2049,16 +2175,63 @@ const ProfileScreen = ({
                   />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">Frecuencia de Backup</label>
+              
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100/50">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('profile.language')}</label>
+                  <div className="relative">
+                    <select 
+                      value={profile.language || 'es'}
+                      onChange={(e) => changeLanguage(e.target.value)}
+                      className="w-full appearance-none bg-white border border-gray-100 rounded-2xl px-4 py-3.5 text-[11px] font-bold text-gray-900 focus:ring-4 ring-primary/5 outline-none transition-all"
+                    >
+                      <option value="es">Español</option>
+                      <option value="en">English</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('profile.currency')}</label>
+                  <div className="relative">
+                    <select 
+                      value={profile.currency || 'EUR'}
+                      onChange={(e) => setProfile(p => ({ ...p, currency: e.target.value }))}
+                      className="w-full appearance-none bg-white border border-gray-100 rounded-2xl px-4 py-3.5 text-[11px] font-bold text-gray-900 focus:ring-4 ring-primary/5 outline-none transition-all"
+                    >
+                      {[
+                        { code: "EUR" },
+                        { code: "USD" },
+                        { code: "GBP" },
+                        { code: "MXN" },
+                        { code: "ARS" },
+                        { code: "BOB" },
+                        { code: "BRL" },
+                        { code: "CLP" },
+                        { code: "COP" },
+                        { code: "PYG" },
+                        { code: "PEN" },
+                        { code: "UYU" }
+                      ].map(curr => (
+                        <option key={curr.code} value={curr.code}>{t(`currency.${curr.code}`)}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-gray-100/50">
+                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('profile.backupFreq')}</label>
                 <div className="relative">
                   <select 
                     value={profile.backupFrequency}
                     onChange={(e) => setProfile(p => ({ ...p, backupFrequency: e.target.value }))}
                     className="w-full appearance-none bg-white border border-gray-100 rounded-2xl px-4 py-3.5 text-sm font-bold text-gray-900 focus:ring-4 ring-primary/5 outline-none transition-all"
                   >
-                    <option>Semanal</option>
-                    <option>Mensual</option>
+                    <option value="Semanal">{t('common.weekly')}</option>
+                    <option value="Mensual">{t('common.monthly')}</option>
                   </select>
                   <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
@@ -2068,32 +2241,32 @@ const ProfileScreen = ({
 
           {/* Section: Ayúdanos */}
           <section className="space-y-4">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">Ayúdanos a mejorar</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] px-2">{t('profile.helpImprove')}</h3>
             <div className="space-y-4 bg-gray-50/50 p-5 rounded-3xl border border-gray-100/50">
               <div className="space-y-3">
-                <p className="text-[11px] font-medium text-gray-600">¿Te gustaría recibir herramientas o recomendaciones?</p>
+                <p className="text-[11px] font-medium text-gray-600">{t('profile.improveTools')}</p>
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setProfile(p => ({ ...p, toolInterest: true }))}
                     className={`px-5 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all ${profile.toolInterest ? 'border-primary/20 bg-primary/5 text-primary' : 'border-gray-200 text-gray-400'}`}
-                  >SÍ</button>
+                  >{t('common.yes')}</button>
                   <button 
                     onClick={() => setProfile(p => ({ ...p, toolInterest: false }))}
                     className={`px-5 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all ${!profile.toolInterest ? 'border-secondary/20 bg-secondary/5 text-secondary' : 'border-gray-200 text-gray-400'}`}
-                  >NO</button>
+                  >{t('common.no')}</button>
                 </div>
               </div>
               <div className="space-y-3 pt-4 border-t border-gray-100">
-                <p className="text-[11px] font-medium text-gray-600">¿Te interesa mejorar la gestión de tus cobros?</p>
+                <p className="text-[11px] font-medium text-gray-600">{t('profile.improveMgmt')}</p>
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setProfile(p => ({ ...p, mgmtInterest: true }))}
                     className={`px-5 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all ${profile.mgmtInterest ? 'border-primary/20 bg-primary/5 text-primary' : 'border-gray-200 text-gray-400'}`}
-                  >SÍ</button>
+                  >{t('common.yes')}</button>
                   <button 
                     onClick={() => setProfile(p => ({ ...p, mgmtInterest: false }))}
                     className={`px-5 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all ${!profile.mgmtInterest ? 'border-secondary/20 bg-secondary/5 text-secondary' : 'border-gray-200 text-gray-400'}`}
-                  >NO</button>
+                  >{t('common.no')}</button>
                 </div>
               </div>
             </div>
@@ -2106,7 +2279,7 @@ const ProfileScreen = ({
               className="w-full h-16 bg-brand-gradient text-white font-bold rounded-2xl shadow-xl shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-3"
             >
               <Settings size={20} />
-              Guardar cambios
+              {t('profile.saveChanges')}
             </button>
           </div>
         </div>
@@ -2119,13 +2292,18 @@ const EditMovementScreen = ({
   movement, 
   setScreen,
   onSave,
-  onDelete
+  onDelete,
+  currency = 'EUR',
+  language = 'es'
 }: { 
   movement: Movement, 
   setScreen: (s: AppScreen) => void,
   onSave: (m: Movement) => void,
-  onDelete: (id: string) => void
+  onDelete: (id: string) => void,
+  currency?: string,
+  language?: string
 }) => {
+  const { t } = useTranslation();
   const [edited, setEdited] = React.useState<Movement>(movement);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
@@ -2165,7 +2343,7 @@ const EditMovementScreen = ({
     const totalAmount = Math.abs(edited.amount);
     
     if (otherPaidSum + paymentAmount > totalAmount) {
-      alert("El total de pagos no puede superar el importe del movimiento");
+      alert(t('payment.totalError'));
       return;
     }
 
@@ -2180,7 +2358,7 @@ const EditMovementScreen = ({
       const newPayment: Payment = {
         id: Math.random().toString(36).substr(2, 9),
         amount: paymentAmount,
-        date: new Date().toLocaleDateString('es-ES'),
+        date: new Date().toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US'),
         method: paymentMethod,
         note: paymentNote
       };
@@ -2202,7 +2380,7 @@ const EditMovementScreen = ({
   };
 
   const handleDeletePayment = (paymentId: string) => {
-    if (!confirm(`¿Seguro que quieres eliminar este ${edited.type === 'income' ? 'cobro' : 'pago'}?`)) return;
+    if (!confirm(t('common.confirmDelete'))) return;
 
     const updatedPayments = (edited.payments || []).filter(p => p.id !== paymentId);
     const updatedPaidAmount = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
@@ -2225,9 +2403,9 @@ const EditMovementScreen = ({
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       amount: pending,
-      date: new Date().toLocaleDateString('es-ES'),
+      date: new Date().toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US'),
       method: 'Efectivo',
-      note: `Pago automático (Marcado como ${edited.type === 'income' ? 'cobrado' : 'pagado'})`
+      note: t('payment.autoNote', { type: edited.type === 'income' ? t('status.collected') : t('status.paid') })
     };
 
     setEdited(prev => ({
@@ -2239,7 +2417,7 @@ const EditMovementScreen = ({
   };
 
   const handleDelete = () => {
-    if (window.confirm('¿Seguro que quieres eliminar este movimiento?')) {
+    if (window.confirm(t('common.confirmDelete'))) {
       onDelete(movement.id);
     }
   };
@@ -2276,7 +2454,7 @@ const EditMovementScreen = ({
       }));
     } catch (err) {
       console.error("Error handling file:", err);
-      alert("Error al procesar el archivo");
+      alert(t('common.error'));
     }
   };
 
@@ -2289,7 +2467,7 @@ const EditMovementScreen = ({
 
   return (
     <div className="bg-background min-h-screen">
-      <ScreenHeader title="Detalles" onBack={() => setScreen('movements')} />
+      <ScreenHeader title={t('movement.details')} onBack={() => setScreen('movements')} currency={currency} language={language} />
       <ContentCard>
         <div className="max-w-2xl mx-auto space-y-8">
           {/* Hidden Inputs */}
@@ -2321,17 +2499,17 @@ const EditMovementScreen = ({
                 </div>
                 <div className="space-y-0.5">
                   <p className="font-bold text-lg opacity-90">{edited.concept}</p>
-                  <p className="text-xs opacity-60 font-medium">Actualizado recientemente</p>
+                  <p className="text-xs opacity-60 font-medium">{t('movement.recentlyUpdated')}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold font-numeric tracking-tight">{edited.amount > 0 ? `+${edited.amount}` : edited.amount} €</p>
+              <p className="text-3xl font-bold font-numeric tracking-tight">{formatCurrency(edited.amount, edited.currency || currency, language)}</p>
             </div>
             <div className="header-shape-1" />
           </motion.div>
 
           <div className="space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 opacity-70">Concepto del movimiento</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 opacity-70">{t('movement.conceptLabel')}</label>
               <input 
                 type="text" 
                 value={edited.concept}
@@ -2342,9 +2520,9 @@ const EditMovementScreen = ({
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 opacity-70">Cantidad</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 opacity-70">{t('movement.amountLabel')}</label>
                 <div className="relative">
-                  <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 font-bold">€</span>
+                  <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 font-bold">{getCurrencySymbol(edited.currency || currency)}</span>
                   <input 
                     type="number" 
                     value={Math.abs(edited.amount)}
@@ -2357,7 +2535,7 @@ const EditMovementScreen = ({
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 opacity-70">Fecha</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 opacity-70">{t('common.date')}</label>
                 <div className="relative">
                   <input 
                     type="text" 
@@ -2464,14 +2642,14 @@ const EditMovementScreen = ({
                   className="flex-1 py-3.5 bg-primary/10 text-primary text-xs font-bold rounded-xl hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
                 >
                   <PlusCircle size={14} />
-                  {edited.type === 'income' ? 'Registrar cobro' : 'Registrar pago'}
+                  {edited.type === 'income' ? t('movement.registerIncome') : t('movement.registerPayment')}
                 </button>
                 <button 
                   onClick={handleMarkAsSettled}
                   className="flex-1 py-3.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
                 >
                   <Check size={14} />
-                  {edited.type === 'income' ? 'Marcar cobrado' : 'Marcar pagado'}
+                  {edited.type === 'income' ? t('movement.markAsCollected') : t('movement.markAsPaid')}
                 </button>
               </div>
             )}
@@ -2480,8 +2658,8 @@ const EditMovementScreen = ({
           {/* Payments History Section */}
           <section className="space-y-4">
             <div className="flex items-center justify-between px-2">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{edited.type === 'income' ? 'Cobros realizados' : 'Pagos realizados'}</h3>
-              <span className="text-[10px] font-bold text-primary bg-primary/5 px-2 py-0.5 rounded-full">{(edited.payments?.length ?? 0)} registros</span>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{edited.type === 'income' ? t('movement.incomesReceived') : t('movement.paymentsDone')}</h3>
+              <span className="text-[10px] font-bold text-primary bg-primary/5 px-2 py-0.5 rounded-full">{(edited.payments?.length ?? 0)} {t('movement.records')}</span>
             </div>
             
             {(edited.payments?.length ?? 0) > 0 ? (
@@ -2493,8 +2671,8 @@ const EditMovementScreen = ({
                         <Receipt size={20} />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-gray-800">{p.amount} €</p>
-                        <p className="text-[10px] font-medium text-gray-400">{p.date} • {p.method}</p>
+                        <p className="text-sm font-bold text-gray-800">{formatCurrency(p.amount, edited.currency || currency, language)}</p>
+                        <p className="text-[10px] font-medium text-gray-400">{p.date} • {p.method === 'Efectivo' ? t('payment.cash') : t('payment.card')}</p>
                         {p.note && <p className="text-[10px] text-gray-400 italic mt-0.5">"{p.note}"</p>}
                       </div>
                     </div>
@@ -2518,7 +2696,7 @@ const EditMovementScreen = ({
             ) : (
               <div className="bg-gray-50/50 border border-dashed border-gray-200 rounded-2xl p-8 text-center">
                 <p className="text-xs font-medium text-gray-400">
-                  {edited.type === 'income' ? 'Todavía no hay cobros registrados.' : 'Todavía no hay pagos registrados.'}
+                  {edited.type === 'income' ? t('movement.noCollections') : t('movement.noPayments')}
                 </p>
               </div>
             )}
@@ -2554,14 +2732,14 @@ const EditMovementScreen = ({
               className="bg-white border-2 border-dashed border-gray-100 py-8 rounded-[2rem] flex flex-col items-center gap-3 text-gray-400 hover:text-primary hover:bg-gray-50 transition-all"
             >
               <Camera size={28} />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Cámara</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">{t('movement.camera')}</span>
             </button>
             <button 
               onClick={() => fileInputRef.current?.click()}
               className="bg-white border-2 border-dashed border-gray-100 py-8 rounded-[2rem] flex flex-col items-center gap-3 text-gray-400 hover:text-primary hover:bg-gray-50 transition-all"
             >
               <PlusCircle size={28} />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Adjuntar</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">{t('movement.addAttachment')}</span>
             </button>
           </div>
 
@@ -2570,7 +2748,7 @@ const EditMovementScreen = ({
               onClick={handleSave}
               className="w-full bg-brand-gradient text-white py-5 rounded-[1.75rem] text-base font-bold shadow-2xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all text-center"
             >
-              Guardar cambios
+              {t('common.saveChanges')}
             </button>
             
             <button 
@@ -2581,7 +2759,7 @@ const EditMovementScreen = ({
               className="w-full bg-gray-900 text-white py-5 rounded-[1.75rem] text-base font-bold shadow-xl shadow-gray-900/10 hover:brightness-125 active:scale-95 transition-all flex items-center justify-center gap-3 relative overflow-hidden group"
             >
               <Receipt size={20} />
-              Generar recibo
+              {t('movement.generateReceipt')}
               <span className="absolute right-6 bg-brand-gradient text-[9px] px-2 py-0.5 rounded-full tracking-widest group-hover:scale-110 transition-transform">PRO</span>
             </button>
 
@@ -2590,7 +2768,7 @@ const EditMovementScreen = ({
               className="w-full text-secondary/40 py-3 text-[10px] font-bold uppercase tracking-[0.25em] flex items-center justify-center gap-2 hover:text-secondary hover:bg-secondary/5 rounded-2xl transition-all"
             >
               <Trash2 size={14} />
-              Eliminar Registro
+              {t('movement.deleteMovement')}
             </button>
           </div>
         </div>
@@ -2627,27 +2805,28 @@ const EditMovementScreen = ({
 
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Importe</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('payment.amountLabel')}</label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-300">€</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-300">{getCurrencySymbol(edited.currency || currency)}</span>
                   <input 
                     type="number" 
                     value={paymentAmount}
                     onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    placeholder={t('payment.placeholderAmount')}
                     className="w-full bg-gray-50 border-none rounded-2xl pl-8 pr-4 py-3.5 text-base font-bold outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all font-numeric"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Método</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('payment.methodLabel')}</label>
                 <div className="relative">
                   <select 
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
                     className="w-full appearance-none bg-gray-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all cursor-pointer"
                   >
-                    {['Efectivo', 'Bizum', 'Transferencia', 'Tarjeta', 'Otro'].map(m => (
+                    {[t('payment.cash'), t('payment.card')].map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>
@@ -2656,12 +2835,12 @@ const EditMovementScreen = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Nota (opcional)</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('payment.noteLabel')}</label>
                 <input 
                   type="text" 
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
-                  placeholder="Ej: Pago adelantado"
+                  placeholder={t('payment.placeholderNote')}
                   className="w-full bg-gray-50 border-none rounded-2xl px-4 py-3.5 text-sm font-medium outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all placeholder:text-gray-300"
                 />
               </div>
@@ -2675,13 +2854,13 @@ const EditMovementScreen = ({
                 }}
                 className="flex-1 py-4 text-sm font-bold text-gray-400 hover:bg-gray-50 rounded-2xl transition-colors"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button 
                 onClick={handleSavePayment}
                 className="flex-2 py-4 bg-brand-gradient text-white text-sm font-bold rounded-2xl shadow-lg shadow-primary/20"
               >
-                Guardar {edited.type === 'income' ? 'cobro' : 'pago'}
+                {t('common.save')} {edited.type === 'income' ? t('common.income').toLowerCase() : t('common.expense').toLowerCase()}
               </button>
             </div>
           </motion.div>
@@ -2708,19 +2887,25 @@ export default function App() {
     { id: '7', concept: 'Reparación Piscina', amount: 350, type: 'income', status: 'settled', date: 'Sa. 02 May', notes: 'Reparación de fuga en sistema de filtrado.' },
   ]);
 
-  const [profile, setProfile] = React.useState<ProfileData>({
-    fullName: 'Alejandro Lopez',
-    email: 'mail.serinco@gmail.com',
-    registrationDate: '12 de Abril, 2026',
-    jobType: 'Jardinería',
-    businessName: 'López Jardines',
-    employmentType: 'Autónomo',
-    autoBackup: true,
-    backupFrequency: 'Mensual',
-    toolInterest: true,
-    mgmtInterest: false,
-    lastAccess: 'Hoy',
-    profilePic: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCnregE4Cc8vUrpeFz8mP7GFvDStonKJ8WgdDxyQrbDdUXNKS1COUpMwS58TzEqUtNggN77w7O89UoEmNkhY9yTbj3PgGpK8Ly-6HQW-OCE0enD2uDly124zmuImGiuXo9uhb31Ive731XeOrrhp7ZM6LS6sULohIxwFB_o7cU05eHoFogulkPnrHXLE8sDP7RQh_Pjvh-rR_iUhEht1q5u7LwGywhMFn2_4nhNOkNZt6eSn3Ek1IavczPTKaS0-cGf5ahnAVOV2sTZ'
+  const [profile, setProfile] = React.useState<ProfileData>(() => {
+    const savedLanguage = localStorage.getItem('trackly_language') || 'es';
+    const savedCurrency = localStorage.getItem('trackly_currency') || 'EUR';
+    return {
+      fullName: 'Alejandro Lopez',
+      email: 'mail.serinco@gmail.com',
+      registrationDate: '12 de Abril, 2026',
+      jobType: 'Jardinería',
+      businessName: 'López Jardines',
+      employmentType: 'Autónomo',
+      autoBackup: true,
+      backupFrequency: 'Mensual',
+      toolInterest: true,
+      mgmtInterest: false,
+      lastAccess: 'Hoy',
+      profilePic: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCnregE4Cc8vUrpeFz8mP7GFvDStonKJ8WgdDxyQrbDdUXNKS1COUpMwS58TzEqUtNggN77w7O89UoEmNkhY9yTbj3PgGpK8Ly-6HQW-OCE0enD2uDly124zmuImGiuXo9uhb31Ive731XeOrrhp7ZM6LS6sULohIxwFB_o7cU05eHoFogulkPnrHXLE8sDP7RQh_Pjvh-rR_iUhEht1q5u7LwGywhMFn2_4nhNOkNZt6eSn3Ek1IavczPTKaS0-cGf5ahnAVOV2sTZ',
+      language: savedLanguage,
+      currency: savedCurrency
+    };
   });
 
   const showToast = (msg: string) => {
@@ -2787,6 +2972,9 @@ export default function App() {
   };
 
   const renderScreen = () => {
+    const currency = profile.currency || 'EUR';
+    const language = profile.language || 'es';
+
     switch (screen) {
       case 'onboarding': return <OnboardingScreen onNext={() => setScreen('movements')} />;
       case 'stats': return (
@@ -2796,6 +2984,8 @@ export default function App() {
           setSelectedMonth={setSelectedMonth}
           selectedYear={selectedYear}
           setSelectedYear={setSelectedYear}
+          currency={currency}
+          language={language}
         />
       );
       case 'movements': return (
@@ -2810,6 +3000,8 @@ export default function App() {
           selectedYear={selectedYear}
           setSelectedYear={setSelectedYear}
           onAddMovement={handleAddMovement}
+          currency={currency}
+          language={language}
         />
       );
       case 'summary': return (
@@ -2818,6 +3010,8 @@ export default function App() {
           onToggleStatus={toggleMovementStatus} 
           setScreen={setScreen} 
           setSelectedMovementId={setSelectedMovementId}
+          currency={currency}
+          language={language}
         />
       );
       case 'edit-movement': return (
@@ -2826,6 +3020,8 @@ export default function App() {
           setScreen={setScreen}
           onSave={handleSaveMovement}
           onDelete={handleDeleteMovement}
+          currency={currency}
+          language={language}
         />
       );
       case 'receipt-preview': return (
@@ -2833,6 +3029,8 @@ export default function App() {
           movement={currentMovement} 
           onBack={() => setScreen('edit-movement')} 
           profile={profile}
+          currency={currency}
+          language={language}
         />
       );
       case 'profile': return (
@@ -2855,6 +3053,8 @@ export default function App() {
           selectedYear={selectedYear}
           setSelectedYear={setSelectedYear}
           onAddMovement={handleAddMovement}
+          currency={currency}
+          language={language}
         />
       );
     }
