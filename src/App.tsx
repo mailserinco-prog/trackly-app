@@ -34,11 +34,20 @@ import {
   RefreshCw,
   ChevronDown,
   File,
+  CreditCard,
 } from "lucide-react";
 
 // --- Types ---
 
 type AppScreen = 'onboarding' | 'dashboard' | 'stats' | 'movements' | 'edit-movement' | 'summary' | 'receipt-preview' | 'profile';
+
+interface Payment {
+  id: string;
+  amount: number;
+  date: string;
+  method: string;
+  note?: string;
+}
 
 interface Movement {
   id: string;
@@ -48,6 +57,8 @@ interface Movement {
   status: 'settled' | 'pending';
   date: string;
   notes?: string;
+  paidAmount?: number;
+  payments?: Payment[];
   attachments?: {
     id: string;
     name: string;
@@ -72,6 +83,39 @@ interface ProfileData {
 }
 
 // --- Utils ---
+
+const getMovementPaidAmount = (movement: Movement) => {
+  if (movement.paidAmount !== undefined) return movement.paidAmount;
+  return movement.status === 'settled' ? Math.abs(movement.amount) : 0;
+};
+
+const getMovementPendingAmount = (movement: Movement) => {
+  const paid = getMovementPaidAmount(movement);
+  return Math.max(0, Math.abs(movement.amount) - paid);
+};
+
+const getMovementProgress = (movement: Movement) => {
+  const paid = getMovementPaidAmount(movement);
+  const total = Math.abs(movement.amount);
+  if (total === 0) return 0;
+  return (paid / total) * 100;
+};
+
+const isMovementFullyCompleted = (movement: Movement) => {
+  return getMovementPaidAmount(movement) >= Math.abs(movement.amount);
+};
+
+const isMovementPartiallyCompleted = (movement: Movement) => {
+  const paid = getMovementPaidAmount(movement);
+  return paid > 0 && paid < Math.abs(movement.amount);
+};
+
+const getPaymentStatus = (movement: Movement) => {
+  const paid = getMovementPaidAmount(movement);
+  if (paid <= 0) return 'pendiente';
+  if (paid < Math.abs(movement.amount)) return 'parcial';
+  return 'cobrado';
+};
 
 const optimizeImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -330,23 +374,23 @@ const StatsScreen = ({
   const currentMovements = getMovementsFor(selectedMonth, selectedYear);
   
   const currentIncomes = currentMovements
-    .filter(m => m.type === 'income' && m.status === 'settled')
-    .reduce((acc, curr) => acc + curr.amount, 0);
+    .filter(m => m.type === 'income')
+    .reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
     
   const currentExpenses = currentMovements
-    .filter(m => m.type === 'expense' && m.status === 'settled')
-    .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+    .filter(m => m.type === 'expense')
+    .reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
 
   const currentBalance = currentIncomes - currentExpenses;
 
   // Pending totals (Global)
   const pendingIncomesTotal = movements
-    .filter(m => m.type === 'income' && m.status === 'pending')
-    .reduce((acc, curr) => acc + curr.amount, 0);
+    .filter(m => m.type === 'income' && !isMovementFullyCompleted(m))
+    .reduce((acc, curr) => acc + getMovementPendingAmount(curr), 0);
 
   const pendingExpensesTotal = movements
-    .filter(m => m.type === 'expense' && m.status === 'pending')
-    .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+    .filter(m => m.type === 'expense' && !isMovementFullyCompleted(m))
+    .reduce((acc, curr) => acc + getMovementPendingAmount(curr), 0);
 
   // Comparison with Previous Month
   const prevMonthIdx = selectedMonth === 0 ? 11 : selectedMonth - 1;
@@ -354,12 +398,12 @@ const StatsScreen = ({
   const prevMovements = getMovementsFor(prevMonthIdx, prevYear);
   
   const prevIncomes = prevMovements
-    .filter(m => m.type === 'income' && m.status === 'settled')
-    .reduce((acc, curr) => acc + curr.amount, 0);
+    .filter(m => m.type === 'income')
+    .reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
     
   const prevExpenses = prevMovements
-    .filter(m => m.type === 'expense' && m.status === 'settled')
-    .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+    .filter(m => m.type === 'expense')
+    .reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
 
   const incomeChange = prevIncomes === 0 ? (currentIncomes > 0 ? 100 : 0) : ((currentIncomes - prevIncomes) / prevIncomes) * 100;
   const expenseChange = prevExpenses === 0 ? (currentExpenses > 0 ? 100 : 0) : ((currentExpenses - prevExpenses) / prevExpenses) * 100;
@@ -378,8 +422,8 @@ const StatsScreen = ({
     const mIdx = (selectedMonth - offset + 12) % 12;
     const y = selectedMonth - offset < 0 ? selectedYear - 1 : selectedYear;
     const movs = getMovementsFor(mIdx, y);
-    const inc = movs.filter(m => m.type === 'income' && m.status === 'settled').reduce((a, c) => a + c.amount, 0);
-    const exp = movs.filter(m => m.type === 'expense' && m.status === 'settled').reduce((a, c) => a + Math.abs(c.amount), 0);
+    const inc = movs.filter(m => m.type === 'income').reduce((a, c) => a + getMovementPaidAmount(c), 0);
+    const exp = movs.filter(m => m.type === 'expense').reduce((a, c) => a + getMovementPaidAmount(c), 0);
     
     // Normalize for height (max 100)
     const maxVal = Math.max(...[0, 1, 2, 3].map(o => {
@@ -387,8 +431,8 @@ const StatsScreen = ({
       const yr = selectedMonth - o < 0 ? selectedYear - 1 : selectedYear;
       const m = getMovementsFor(idx, yr);
       return Math.max(
-        m.filter(mv => mv.type === 'income' && mv.status === 'settled').reduce((a, c) => a + c.amount, 0),
-        m.filter(mv => mv.type === 'expense' && mv.status === 'settled').reduce((a, c) => a + Math.abs(c.amount), 0)
+        m.filter(mv => mv.type === 'income').reduce((a, c) => a + getMovementPaidAmount(c), 0),
+        m.filter(mv => mv.type === 'expense').reduce((a, c) => a + getMovementPaidAmount(c), 0)
       );
     }), 1);
 
@@ -584,6 +628,7 @@ const MovementsScreen = ({
   setScreen, 
   movements, 
   onToggleStatus,
+  onUpdateMovement,
   setSelectedMovementId,
   selectedMonth,
   setSelectedMonth,
@@ -594,6 +639,7 @@ const MovementsScreen = ({
   setScreen: (s: AppScreen) => void, 
   movements: Movement[],
   onToggleStatus: (id: string) => void,
+  onUpdateMovement: (m: Movement) => void,
   setSelectedMovementId: (id: string) => void,
   selectedMonth: number,
   setSelectedMonth: (m: number) => void,
@@ -603,6 +649,17 @@ const MovementsScreen = ({
 }) => {
   const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const sliderRef = React.useRef<HTMLDivElement>(null);
+  
+  // Payment Modal State
+  const [paymentModalOpen, setPaymentModalOpen] = React.useState(false);
+  const [selectedMovForPayment, setSelectedMovForPayment] = React.useState<Movement | null>(null);
+  const [editingPaymentId, setEditingPaymentId] = React.useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = React.useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = React.useState('Efectivo');
+  const [paymentNote, setPaymentNote] = React.useState('');
+  
+  // Sub-lists visibility
+  const [showPaymentsForId, setShowPaymentsForId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (sliderRef.current) {
@@ -624,14 +681,118 @@ const MovementsScreen = ({
   });
 
   const totalIncomes = filteredMovements
-    .filter(m => m.type === 'income' && m.status === 'settled')
-    .reduce((acc, curr) => acc + curr.amount, 0);
+    .filter(m => m.type === 'income')
+    .reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
 
   const totalExpenses = filteredMovements
-    .filter(m => m.type === 'expense' && m.status === 'settled')
-    .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+    .filter(m => m.type === 'expense')
+    .reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
 
   const currentBalance = totalIncomes - totalExpenses;
+
+  const handleOpenPaymentModal = (m: Movement, p?: Payment) => {
+    setSelectedMovForPayment(m);
+    if (p) {
+      setEditingPaymentId(p.id);
+      setPaymentAmount(p.amount);
+      setPaymentMethod(p.method);
+      setPaymentNote(p.note || '');
+    } else {
+      setEditingPaymentId(null);
+      const pending = getMovementPendingAmount(m);
+      setPaymentAmount(pending);
+      setPaymentMethod('Efectivo');
+      setPaymentNote('');
+    }
+    setPaymentModalOpen(true);
+  };
+
+  const handleSavePayment = () => {
+    if (!selectedMovForPayment || paymentAmount <= 0) return;
+    
+    const otherPayments = (selectedMovForPayment.payments || []).filter(p => p.id !== editingPaymentId);
+    const otherPaidSum = otherPayments.reduce((acc, p) => acc + p.amount, 0);
+    const totalAmount = Math.abs(selectedMovForPayment.amount);
+    
+    if (otherPaidSum + paymentAmount > totalAmount) {
+      alert("El total de pagos no puede superar el importe del movimiento");
+      return;
+    }
+
+    let updatedPayments: Payment[];
+    if (editingPaymentId) {
+      updatedPayments = (selectedMovForPayment.payments || []).map(p => 
+        p.id === editingPaymentId 
+          ? { ...p, amount: paymentAmount, method: paymentMethod, note: paymentNote } 
+          : p
+      );
+    } else {
+      const newPayment: Payment = {
+        id: Math.random().toString(36).substr(2, 9),
+        amount: paymentAmount,
+        date: new Date().toLocaleDateString('es-ES'),
+        method: paymentMethod,
+        note: paymentNote
+      };
+      updatedPayments = [...(selectedMovForPayment.payments || []), newPayment];
+    }
+
+    const updatedPaidAmount = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+    const isSettled = updatedPaidAmount >= totalAmount;
+
+    const updatedMovement: Movement = {
+      ...selectedMovForPayment,
+      paidAmount: updatedPaidAmount,
+      payments: updatedPayments,
+      status: isSettled ? 'settled' : 'pending'
+    };
+
+    onUpdateMovement(updatedMovement);
+    setPaymentModalOpen(false);
+    setSelectedMovForPayment(null);
+    setEditingPaymentId(null);
+  };
+
+  const handleDeletePayment = (m: Movement, paymentId: string) => {
+    if (!confirm(`¿Seguro que quieres eliminar este ${m.type === 'income' ? 'cobro' : 'pago'}?`)) return;
+
+    const updatedPayments = (m.payments || []).filter(p => p.id !== paymentId);
+    const updatedPaidAmount = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+    const totalAmount = Math.abs(m.amount);
+    const isSettled = updatedPaidAmount >= totalAmount;
+
+    const updatedMovement: Movement = {
+      ...m,
+      paidAmount: updatedPaidAmount,
+      payments: updatedPayments,
+      status: isSettled ? 'settled' : 'pending'
+    };
+
+    onUpdateMovement(updatedMovement);
+  };
+
+  const handleMarkAsSettled = (m: Movement) => {
+    const pending = getMovementPendingAmount(m);
+    const totalAmount = Math.abs(m.amount);
+    if (pending <= 0) return;
+
+    const newPayment: Payment = {
+      id: Math.random().toString(36).substr(2, 9),
+      amount: pending,
+      date: new Date().toLocaleDateString('es-ES'),
+      method: 'Efectivo',
+      note: `Pago automático (Marcado como ${m.type === 'income' ? 'cobrado' : 'pagado'})`
+    };
+
+    const updatedMovement: Movement = {
+      ...m,
+      paidAmount: totalAmount,
+      payments: [...(m.payments || []), newPayment],
+      status: 'settled'
+    };
+
+    onUpdateMovement(updatedMovement);
+  };
 
   return (
     <div>
@@ -725,47 +886,218 @@ const MovementsScreen = ({
             </div>
             
             <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden p-2">
-              {filteredMovements.length > 0 ? filteredMovements.map(item => (
-                <div 
-                  key={item.id} 
-                  className="py-3 px-3 flex items-center gap-3 group border-b border-gray-50 last:border-none hover:bg-gray-50/50 rounded-2xl transition-colors cursor-pointer"
-                  onClick={() => {
-                    setSelectedMovementId(item.id);
-                    setScreen('edit-movement');
-                  }}
-                >
-                  <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <button 
-                      onClick={() => onToggleStatus(item.id)}
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all ${
-                        item.status === 'settled' 
-                          ? 'bg-primary border-primary shadow-sm shadow-primary/20' 
-                          : 'bg-white border-gray-200'
-                      }`}
-                    >
-                      {item.status === 'settled' && <Check size={14} className="text-white" strokeWidth={4} />}
-                    </button>
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate group-hover:text-primary transition-colors">
-                      {item.concept}
-                    </p>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider opacity-70">
-                      {item.date}
-                    </p>
-                  </div>
+              {filteredMovements.length > 0 ? filteredMovements.map(item => {
+                const paid = getMovementPaidAmount(item);
+                const pending = getMovementPendingAmount(item);
+                const progress = getMovementProgress(item);
+                const isIncome = item.type === 'income';
+                const isCompleted = isMovementFullyCompleted(item);
+                const isPartial = isMovementPartiallyCompleted(item);
 
-                  <div className="text-right flex items-center gap-4">
-                    <span className={`text-sm font-bold font-numeric ${item.type === 'income' ? 'text-primary' : 'text-secondary'}`}>
-                      {item.amount > 0 ? `+${item.amount}` : item.amount} €
-                    </span>
-                    <button className="text-gray-200 group-hover:text-primary transition-colors p-1">
-                      <Edit2 size={16} />
-                    </button>
+                return (
+                  <div key={item.id} className="border-b border-gray-50 last:border-none hover:bg-gray-50/50 rounded-2xl transition-colors">
+                    <div 
+                      className="py-3 px-3 flex items-center gap-3 group cursor-pointer"
+                      onClick={() => {
+                        setSelectedMovementId(item.id);
+                        setScreen('edit-movement');
+                      }}
+                    >
+                      <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => onToggleStatus(item.id)}
+                          className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all ${
+                            isCompleted 
+                              ? 'bg-primary border-primary shadow-sm shadow-primary/20' 
+                              : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          {isCompleted && <Check size={14} className="text-white" strokeWidth={4} />}
+                        </button>
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-gray-900 truncate group-hover:text-primary transition-colors">
+                            {item.concept}
+                          </p>
+                          {isPartial && (
+                            <span className="bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase">Parcial</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider opacity-70">
+                          {item.date}
+                        </p>
+                      </div>
+
+                      <div className="text-right flex items-center gap-4">
+                        <div className="flex flex-col items-end">
+                          <span className={`text-sm font-bold font-numeric ${isIncome ? 'text-primary' : 'text-secondary'}`}>
+                            {item.amount > 0 ? `+${item.amount}` : item.amount} €
+                          </span>
+                        </div>
+                        <Edit2 size={16} className="text-gray-200 group-hover:text-primary transition-colors" />
+                      </div>
+                    </div>
+
+                    {/* Partial Payment UI */}
+                    {!isCompleted && (
+                      <div className="px-4 pb-4 pt-1 space-y-3">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-gray-50 p-2 rounded-xl text-center">
+                            <p className="text-[8px] font-bold text-gray-400 uppercase">Total</p>
+                            <p className="text-[10px] font-bold text-gray-700">{Math.abs(item.amount)}€</p>
+                          </div>
+                          <div className="bg-green-50 p-2 rounded-xl text-center">
+                            <p className="text-[8px] font-bold text-green-400 uppercase">{isIncome ? 'Cobrado' : 'Pagado'}</p>
+                            <p className="text-[10px] font-bold text-green-700">{paid}€</p>
+                          </div>
+                          <div className="bg-amber-50 p-2 rounded-xl text-center">
+                            <p className="text-[8px] font-bold text-amber-400 uppercase">Pendiente</p>
+                            <p className="text-[10px] font-bold text-amber-700">{pending}€</p>
+                          </div>
+                        </div>
+
+                        {paid > 0 && (
+                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${progress}%` }}
+                              className="h-full bg-green-500"
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenPaymentModal(item);
+                            }}
+                            className="px-3 py-1.5 bg-primary/10 text-primary text-[10px] font-bold rounded-lg hover:bg-primary/20 transition-colors flex items-center gap-1.5"
+                          >
+                            <PlusCircle size={12} />
+                            {isIncome ? 'Registrar cobro' : 'Registrar pago'}
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkAsSettled(item);
+                            }}
+                            className="px-3 py-1.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1.5"
+                          >
+                            <Check size={12} />
+                            {isIncome ? 'Marcar cobrado' : 'Marcar pagado'}
+                          </button>
+                          
+                          {(item.payments?.length ?? 0) > 0 && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowPaymentsForId(showPaymentsForId === item.id ? null : item.id);
+                              }}
+                              className="px-3 py-1.5 bg-gray-50 text-gray-400 text-[10px] font-bold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1.5"
+                            >
+                              <Receipt size={12} />
+                              {showPaymentsForId === item.id ? 'Ocultar pagos' : 'Ver pagos'}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Payments List */}
+                        {showPaymentsForId === item.id && item.payments && (
+                          <motion.div 
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            className="space-y-2 mt-2 pt-2 border-t border-gray-50"
+                          >
+                            {item.payments.map(p => (
+                              <div key={p.id} className="flex justify-between items-center text-[10px] bg-white p-2 rounded-lg border border-gray-50 shadow-sm group/pay">
+                                <div>
+                                  <p className="font-bold text-gray-700">{p.amount}€ • {p.method}</p>
+                                  <p className="text-gray-400">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenPaymentModal(item, p);
+                                    }}
+                                    className="p-1 hover:bg-gray-50 rounded text-gray-400 hover:text-primary transition-colors"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeletePayment(item, p.id);
+                                    }}
+                                    className="p-1 hover:bg-gray-50 rounded text-gray-400 hover:text-secondary transition-colors"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Show "Ver pagos" button if completed but has payments */}
+                    {isCompleted && (item.payments?.length ?? 0) > 0 && (
+                      <div className="px-4 pb-4">
+                         <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowPaymentsForId(showPaymentsForId === item.id ? null : item.id);
+                          }}
+                          className="px-3 py-1.5 bg-gray-50 text-gray-400 text-[10px] font-bold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1.5"
+                        >
+                          <Receipt size={12} />
+                          {showPaymentsForId === item.id ? 'Ocultar historial' : 'Ver historial de pagos'}
+                        </button>
+                        {showPaymentsForId === item.id && item.payments && (
+                          <motion.div 
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            className="space-y-2 mt-2 pt-2 border-t border-gray-50"
+                          >
+                            {item.payments.map(p => (
+                              <div key={p.id} className="flex justify-between items-center text-[10px] bg-white p-2 rounded-lg border border-gray-50 shadow-sm group/pay">
+                                <div>
+                                  <p className="font-bold text-gray-700">{p.amount}€ • {p.method}</p>
+                                  <p className="text-gray-400">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenPaymentModal(item, p);
+                                    }}
+                                    className="p-1 hover:bg-gray-50 rounded text-gray-400 hover:text-primary transition-colors"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeletePayment(item, p.id);
+                                    }}
+                                    className="p-1 hover:bg-gray-50 rounded text-gray-400 hover:text-secondary transition-colors"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )) : (
+                );
+              }) : (
                 <div className="py-12 text-center">
                   <p className="text-gray-300 text-xs font-bold uppercase tracking-widest">No hay movimientos este mes</p>
                 </div>
@@ -774,6 +1106,95 @@ const MovementsScreen = ({
           </section>
         </div>
       </ContentCard>
+
+      {/* Payment Modal */}
+      {paymentModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => {
+              setPaymentModalOpen(false);
+              setEditingPaymentId(null);
+            }}
+          />
+          <motion.div 
+            initial={{ y: 200, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 relative z-10 shadow-2xl overflow-hidden"
+          >
+            <div className="mb-6 text-center">
+              <h3 className="text-lg font-bold text-gray-900">
+                {editingPaymentId 
+                  ? (selectedMovForPayment?.type === 'income' ? 'Editar Cobro' : 'Editar Pago')
+                  : (selectedMovForPayment?.type === 'income' ? 'Registrar Cobro' : 'Registrar Pago')
+                }
+              </h3>
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+                {selectedMovForPayment?.concept}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Importe</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-300">€</span>
+                  <input 
+                    type="number" 
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-gray-50 border-none rounded-2xl pl-8 pr-4 py-3.5 text-base font-bold outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all font-numeric"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Método</label>
+                <div className="relative">
+                  <select 
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full appearance-none bg-gray-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all cursor-pointer"
+                  >
+                    {['Efectivo', 'Bizum', 'Transferencia', 'Tarjeta', 'Otro'].map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Nota (opcional)</label>
+                <input 
+                  type="text" 
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  placeholder="Ej: Pago adelantado"
+                  className="w-full bg-gray-50 border-none rounded-2xl px-4 py-3.5 text-sm font-medium outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all placeholder:text-gray-300"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-10">
+              <button 
+                onClick={() => setPaymentModalOpen(false)}
+                className="flex-1 py-4 text-sm font-bold text-gray-400 hover:bg-gray-50 rounded-2xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleSavePayment}
+                className="flex-2 py-4 bg-brand-gradient text-white text-sm font-bold rounded-2xl shadow-lg shadow-primary/20"
+              >
+                Guardar pago
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
@@ -786,36 +1207,55 @@ const PendingItem = ({
   item: Movement, 
   onToggleStatus: (id: string) => void,
   onClick: () => void 
-}) => (
-  <div 
-    className="py-3 px-2 flex items-center gap-3 border-b border-gray-50 last:border-none hover:bg-gray-50/50 transition-colors cursor-pointer"
-    onClick={onClick}
-  >
-    <button 
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggleStatus(item.id);
-      }}
-      className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-all ${
-        item.status === 'settled' 
-          ? 'bg-primary border-primary' 
-          : 'bg-white border-gray-200'
-      }`}
+}) => {
+  const isCompleted = isMovementFullyCompleted(item);
+  const paid = getMovementPaidAmount(item);
+  const pending = getMovementPendingAmount(item);
+  const isPartial = isMovementPartiallyCompleted(item);
+
+  return (
+    <div 
+      className="py-3 px-2 flex items-center gap-3 border-b border-gray-50 last:border-none hover:bg-gray-50/50 transition-colors cursor-pointer"
+      onClick={onClick}
     >
-      {item.status === 'settled' && <Check size={12} className="text-white" strokeWidth={4} />}
-    </button>
-    <div className="flex-1 min-w-0">
-      <p className="text-xs font-bold text-gray-900 truncate">{item.concept}</p>
-      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{item.date}</p>
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleStatus(item.id);
+        }}
+        className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-all ${
+          isCompleted 
+            ? 'bg-primary border-primary' 
+            : 'bg-white border-gray-200'
+        }`}
+      >
+        {isCompleted && <Check size={12} className="text-white" strokeWidth={4} />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-bold text-gray-900 truncate">{item.concept}</p>
+          {isPartial && (
+            <span className="bg-amber-100 text-amber-700 text-[7px] font-bold px-1 py-0.5 rounded-full uppercase">Parcial</span>
+          )}
+        </div>
+        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{item.date}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="text-right">
+          <span className={`text-xs font-bold font-numeric block ${item.type === 'income' ? 'text-primary' : 'text-secondary'}`}>
+            {item.amount > 0 ? `+${item.amount}` : item.amount} €
+          </span>
+          {paid > 0 && pending > 0 && (
+            <span className="text-[8px] font-bold text-gray-400 block -mt-1">
+              Falta {pending}€
+            </span>
+          )}
+        </div>
+        <Edit2 size={12} className="text-gray-200" />
+      </div>
     </div>
-    <div className="flex items-center gap-2">
-      <span className={`text-xs font-bold font-numeric ${item.type === 'income' ? 'text-primary' : 'text-secondary'}`}>
-        {item.amount > 0 ? `+${item.amount}` : item.amount} €
-      </span>
-      <Edit2 size={12} className="text-gray-200" />
-    </div>
-  </div>
-);
+  );
+};
 
 const SummaryScreen = ({ 
   movements, 
@@ -830,14 +1270,14 @@ const SummaryScreen = ({
 }) => {
   const [expandedType, setExpandedType] = React.useState<'income' | 'expense' | null>(null);
 
-  const pendingIncomes = movements.filter(m => m.type === 'income' && m.status === 'pending');
-  const pendingExpenses = movements.filter(m => m.type === 'expense' && m.status === 'pending');
+  const pendingIncomes = movements.filter(m => m.type === 'income' && !isMovementFullyCompleted(m));
+  const pendingExpenses = movements.filter(m => m.type === 'expense' && !isMovementFullyCompleted(m));
 
-  const totalPendingIncome = pendingIncomes.reduce((acc, curr) => acc + curr.amount, 0);
-  const totalPendingExpense = Math.abs(pendingExpenses.reduce((acc, curr) => acc + curr.amount, 0));
+  const totalPendingIncome = pendingIncomes.reduce((acc, curr) => acc + getMovementPendingAmount(curr), 0);
+  const totalPendingExpense = pendingExpenses.reduce((acc, curr) => acc + getMovementPendingAmount(curr), 0);
 
-  const totalIncomes = movements.filter(m => m.type === 'income' && m.status === 'settled').reduce((acc, curr) => acc + curr.amount, 0);
-  const totalExpenses = movements.filter(m => m.type === 'expense' && m.status === 'settled').reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+  const totalIncomes = movements.filter(m => m.type === 'income').reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
+  const totalExpenses = movements.filter(m => m.type === 'expense').reduce((acc, curr) => acc + getMovementPaidAmount(curr), 0);
   const historicalBalance = totalIncomes - totalExpenses;
 
   return (
@@ -1131,33 +1571,70 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
       doc.line(20, 185, 190, 185);
 
       // 4. TOTAL (MUY IMPORTANTE)
+      const isExpense = movement.type === 'expense';
+      const absAmount = Math.abs(movement.amount);
+      const paidAmount = getMovementPaidAmount(movement);
+      const pendingAmount = getMovementPendingAmount(movement);
+      const isPartial = isMovementPartiallyCompleted(movement);
+      const isCompleted = isMovementFullyCompleted(movement);
+      
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      doc.text("TOTAL", 105, 205, { align: "center" });
-
-      doc.setFontSize(42);
-      // Remove negative sign for display, use appropriate color
-      const isExpense = movement.type === 'expense';
-      const absAmount = Math.abs(movement.amount);
       
-      if (isExpense) {
-        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-      } else {
+      if (isPartial) {
+        doc.text("DESGLOSE DE PAGO", 105, 195, { align: "center" });
+        
+        doc.setFontSize(9);
+        doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
+        doc.text(`Total: ${absAmount},00 €`, 105, 202, { align: "center" });
+        
+        doc.setFontSize(11);
         doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+        doc.text(`${isExpense ? 'Pagado' : 'Cobrado'}: ${paidAmount},00 €`, 105, 210, { align: "center" });
+        
+        doc.setFontSize(14);
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        doc.text(`PENDIENTE: ${pendingAmount},00 €`, 105, 220, { align: "center" });
+      } else {
+        doc.text("TOTAL", 105, 205, { align: "center" });
+        doc.setFontSize(42);
+        if (isExpense) {
+          doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        } else {
+          doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+        }
+        doc.text(`${absAmount},00 €`, 105, 222, { align: "center" });
       }
-      doc.text(`${absAmount},00 €`, 105, 222, { align: "center" });
 
       // 5. ESTADO
-      const isSettled = movement.status === 'settled';
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      if (isSettled) {
+      if (isCompleted) {
         doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        doc.text("Estado: COBRADO", 105, 235, { align: "center" });
+        doc.text(`Estado: ${isExpense ? 'PAGADO' : 'COBRADO'}`, 105, 235, { align: "center" });
+      } else if (isPartial) {
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        doc.text("Estado: PARCIAL", 105, 235, { align: "center" });
       } else {
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
         doc.text("Estado: PENDIENTE", 105, 235, { align: "center" });
+      }
+
+      // 6. HISTORIAL DE PAGOS (Si existen)
+      if (movement.payments && movement.payments.length > 0) {
+        doc.setFontSize(10);
+        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+        doc.text(`${isExpense ? 'Pagos' : 'Cobros'} realizados:`, 20, 250);
+        
+        doc.setFontSize(8);
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        let currentY = 258;
+        movement.payments.forEach((p) => {
+          if (currentY > 275) return; // Prevent overflow for now
+          doc.text(`${p.date} - ${p.method}: ${p.amount}€ ${p.note ? `(${p.note})` : ''}`, 20, currentY);
+          currentY += 5;
+        });
       }
 
       // 9. PIE
@@ -1229,22 +1706,72 @@ const ReceiptPreviewScreen = ({ movement, onBack, profile }: { movement: Movemen
             {/* Status Badge */}
             <div className="flex justify-center mb-10">
               <div className={`px-4 py-1.5 rounded-full flex items-center gap-2 border shadow-sm ${
-                movement.status === 'settled' 
+                isMovementFullyCompleted(movement) 
                   ? 'bg-primary/5 border-primary/20 text-primary' 
-                  : 'bg-secondary/5 border-secondary/20 text-secondary'
+                  : isMovementPartiallyCompleted(movement)
+                    ? 'bg-amber-50 border-amber-200 text-amber-600'
+                    : 'bg-secondary/5 border-secondary/20 text-secondary'
               }`}>
-                {movement.status === 'settled' ? <Check size={14} strokeWidth={3} /> : <Clock size={14} strokeWidth={3} />}
-                <span className="text-[10px] font-bold uppercase tracking-widest">ESTADO: {movement.status === 'settled' ? 'COBRADO' : 'PENDIENTE'}</span>
+                {isMovementFullyCompleted(movement) ? <Check size={14} strokeWidth={3} /> : <Clock size={14} strokeWidth={3} />}
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  ESTADO: {
+                    isMovementFullyCompleted(movement) 
+                      ? (movement.type === 'income' ? 'COBRADO' : 'PAGADO')
+                      : isMovementPartiallyCompleted(movement) ? 'PARCIAL' : 'PENDIENTE'
+                  }
+                </span>
               </div>
             </div>
 
             {/* Total Amount Section */}
             <div className="flex flex-col items-center py-8 border-t border-dashed border-gray-100">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Total del Recibo</span>
-              <h2 className="text-4xl font-bold text-primary font-numeric">
-                {movement.amount > 0 ? `+${movement.amount}` : movement.amount},00 €
-              </h2>
+              {isMovementPartiallyCompleted(movement) ? (
+                <div className="w-full space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <p className="text-[8px] font-bold text-gray-400 uppercase">Total</p>
+                      <p className="text-sm font-bold text-gray-900">{Math.abs(movement.amount)}€</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[8px] font-bold text-primary uppercase">{movement.type === 'income' ? 'Cobrado' : 'Pagado'}</p>
+                      <p className="text-sm font-bold text-primary">{getMovementPaidAmount(movement)}€</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[8px] font-bold text-secondary uppercase">Pendiente</p>
+                      <p className="text-sm font-bold text-secondary">{getMovementPendingAmount(movement)}€</p>
+                    </div>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-primary" style={{ width: `${getMovementProgress(movement)}%` }} />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Total del Recibo</span>
+                  <h2 className={`text-4xl font-bold font-numeric ${movement.type === 'income' ? 'text-primary' : 'text-secondary'}`}>
+                    {Math.abs(movement.amount)},00 €
+                  </h2>
+                </>
+              )}
             </div>
+
+            {/* Payments List if any */}
+            {(movement.payments?.length ?? 0) > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-50">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">{movement.type === 'income' ? 'Cobros' : 'Pagos'} realizados</p>
+                <div className="space-y-2">
+                  {movement.payments?.map(p => (
+                    <div key={p.id} className="flex justify-between items-center text-[10px] bg-gray-50 p-3 rounded-xl border border-gray-100">
+                      <div>
+                        <p className="font-bold text-gray-700">{p.amount}€ • {p.method}</p>
+                        <p className="text-gray-400 font-medium">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
+                      </div>
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Receipt Footer */}
             <div className="mt-4 text-center">
@@ -1603,8 +2130,112 @@ const EditMovementScreen = ({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Payment Modal State
+  const [paymentModalOpen, setPaymentModalOpen] = React.useState(false);
+  const [editingPaymentId, setEditingPaymentId] = React.useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = React.useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = React.useState('Efectivo');
+  const [paymentNote, setPaymentNote] = React.useState('');
+
   const handleSave = () => {
     onSave(edited);
+  };
+
+  const handleOpenPaymentModal = (p?: Payment) => {
+    if (p) {
+      setEditingPaymentId(p.id);
+      setPaymentAmount(p.amount);
+      setPaymentMethod(p.method);
+      setPaymentNote(p.note || '');
+    } else {
+      setEditingPaymentId(null);
+      const pending = getMovementPendingAmount(edited);
+      setPaymentAmount(pending);
+      setPaymentMethod('Efectivo');
+      setPaymentNote('');
+    }
+    setPaymentModalOpen(true);
+  };
+
+  const handleSavePayment = () => {
+    if (paymentAmount <= 0) return;
+    
+    const otherPayments = (edited.payments || []).filter(p => p.id !== editingPaymentId);
+    const otherPaidSum = otherPayments.reduce((acc, p) => acc + p.amount, 0);
+    const totalAmount = Math.abs(edited.amount);
+    
+    if (otherPaidSum + paymentAmount > totalAmount) {
+      alert("El total de pagos no puede superar el importe del movimiento");
+      return;
+    }
+
+    let updatedPayments: Payment[];
+    if (editingPaymentId) {
+      updatedPayments = (edited.payments || []).map(p => 
+        p.id === editingPaymentId 
+          ? { ...p, amount: paymentAmount, method: paymentMethod, note: paymentNote } 
+          : p
+      );
+    } else {
+      const newPayment: Payment = {
+        id: Math.random().toString(36).substr(2, 9),
+        amount: paymentAmount,
+        date: new Date().toLocaleDateString('es-ES'),
+        method: paymentMethod,
+        note: paymentNote
+      };
+      updatedPayments = [...(edited.payments || []), newPayment];
+    }
+
+    const updatedPaidAmount = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+    const isSettled = updatedPaidAmount >= totalAmount;
+
+    setEdited(prev => ({
+      ...prev,
+      paidAmount: updatedPaidAmount,
+      payments: updatedPayments,
+      status: isSettled ? 'settled' : 'pending'
+    }));
+
+    setPaymentModalOpen(false);
+    setEditingPaymentId(null);
+  };
+
+  const handleDeletePayment = (paymentId: string) => {
+    if (!confirm(`¿Seguro que quieres eliminar este ${edited.type === 'income' ? 'cobro' : 'pago'}?`)) return;
+
+    const updatedPayments = (edited.payments || []).filter(p => p.id !== paymentId);
+    const updatedPaidAmount = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+    const totalAmount = Math.abs(edited.amount);
+    const isSettled = updatedPaidAmount >= totalAmount;
+
+    setEdited(prev => ({
+      ...prev,
+      paidAmount: updatedPaidAmount,
+      payments: updatedPayments,
+      status: isSettled ? 'settled' : 'pending'
+    }));
+  };
+
+  const handleMarkAsSettled = () => {
+    const pending = getMovementPendingAmount(edited);
+    const totalAmount = Math.abs(edited.amount);
+    if (pending <= 0) return;
+
+    const newPayment: Payment = {
+      id: Math.random().toString(36).substr(2, 9),
+      amount: pending,
+      date: new Date().toLocaleDateString('es-ES'),
+      method: 'Efectivo',
+      note: `Pago automático (Marcado como ${edited.type === 'income' ? 'cobrado' : 'pagado'})`
+    };
+
+    setEdited(prev => ({
+      ...prev,
+      paidAmount: totalAmount,
+      payments: [...(prev.payments || []), newPayment],
+      status: 'settled'
+    }));
   };
 
   const handleDelete = () => {
@@ -1772,6 +2403,127 @@ const EditMovementScreen = ({
             </div>
           </section>
 
+          {/* Payments Breakdown Section */}
+          <section className="bg-white border border-gray-100 p-6 rounded-[2rem] shadow-sm space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
+                  <CreditCard size={18} />
+                </div>
+                <h3 className="font-bold text-sm text-gray-800">Desglose de Pagos</h3>
+              </div>
+              <div className={`px-3 py-1 rounded-full text-[8px] font-bold uppercase tracking-widest ${
+                isMovementFullyCompleted(edited) 
+                  ? 'bg-primary/10 text-primary' 
+                  : isMovementPartiallyCompleted(edited)
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-gray-100 text-gray-400'
+              }`}>
+                {isMovementFullyCompleted(edited) 
+                  ? (edited.type === 'income' ? 'Cobrado' : 'Pagado')
+                  : isMovementPartiallyCompleted(edited) ? 'Parcial' : 'Pendiente'
+                }
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-gray-50 p-3 rounded-2xl text-center">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Total</p>
+                <p className="text-sm font-bold text-gray-700">{Math.abs(edited.amount)}€</p>
+              </div>
+              <div className="bg-green-50 p-3 rounded-2xl text-center">
+                <p className="text-[9px] font-bold text-green-400 uppercase tracking-wider mb-1">{edited.type === 'income' ? 'Cobrado' : 'Pagado'}</p>
+                <p className="text-sm font-bold text-green-700">{getMovementPaidAmount(edited)}€</p>
+              </div>
+              <div className="bg-amber-50 p-3 rounded-2xl text-center">
+                <p className="text-[9px] font-bold text-amber-500 uppercase tracking-wider mb-1">Pendiente</p>
+                <p className="text-sm font-bold text-amber-700">{getMovementPendingAmount(edited)}€</p>
+              </div>
+            </div>
+
+            {getMovementPaidAmount(edited) > 0 && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-[10px] font-bold px-1">
+                  <span className="text-gray-400">Progreso</span>
+                  <span className="text-primary">{Math.round(getMovementProgress(edited))}%</span>
+                </div>
+                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${getMovementProgress(edited)}%` }}
+                    className="h-full bg-brand-gradient"
+                  />
+                </div>
+              </div>
+            )}
+
+            {!isMovementFullyCompleted(edited) && (
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => handleOpenPaymentModal()}
+                  className="flex-1 py-3.5 bg-primary/10 text-primary text-xs font-bold rounded-xl hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
+                >
+                  <PlusCircle size={14} />
+                  {edited.type === 'income' ? 'Registrar cobro' : 'Registrar pago'}
+                </button>
+                <button 
+                  onClick={handleMarkAsSettled}
+                  className="flex-1 py-3.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                >
+                  <Check size={14} />
+                  {edited.type === 'income' ? 'Marcar cobrado' : 'Marcar pagado'}
+                </button>
+              </div>
+            )}
+          </section>
+
+          {/* Payments History Section */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{edited.type === 'income' ? 'Cobros realizados' : 'Pagos realizados'}</h3>
+              <span className="text-[10px] font-bold text-primary bg-primary/5 px-2 py-0.5 rounded-full">{(edited.payments?.length ?? 0)} registros</span>
+            </div>
+            
+            {(edited.payments?.length ?? 0) > 0 ? (
+              <div className="space-y-3">
+                {edited.payments?.map((p) => (
+                  <div key={p.id} className="bg-white border border-gray-100 rounded-2xl p-4 flex items-center justify-between shadow-sm group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-green-50 text-green-500 rounded-xl flex items-center justify-center">
+                        <Receipt size={20} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">{p.amount} €</p>
+                        <p className="text-[10px] font-medium text-gray-400">{p.date} • {p.method}</p>
+                        {p.note && <p className="text-[10px] text-gray-400 italic mt-0.5">"{p.note}"</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleOpenPaymentModal(p)}
+                        className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeletePayment(p.id)}
+                        className="p-2 text-gray-400 hover:text-secondary hover:bg-secondary/5 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-gray-50/50 border border-dashed border-gray-200 rounded-2xl p-8 text-center">
+                <p className="text-xs font-medium text-gray-400">
+                  {edited.type === 'income' ? 'Todavía no hay cobros registrados.' : 'Todavía no hay pagos registrados.'}
+                </p>
+              </div>
+            )}
+          </section>
+
           {/* Attachments Display */}
           {(edited.attachments?.length ?? 0) > 0 && (
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -1822,7 +2574,10 @@ const EditMovementScreen = ({
             </button>
             
             <button 
-              onClick={() => setScreen('receipt-preview')}
+              onClick={() => {
+                onSave(edited);
+                setScreen('receipt-preview');
+              }}
               className="w-full bg-gray-900 text-white py-5 rounded-[1.75rem] text-base font-bold shadow-xl shadow-gray-900/10 hover:brightness-125 active:scale-95 transition-all flex items-center justify-center gap-3 relative overflow-hidden group"
             >
               <Receipt size={20} />
@@ -1840,6 +2595,98 @@ const EditMovementScreen = ({
           </div>
         </div>
       </ContentCard>
+
+      {/* Payment Modal inside EditMovementScreen */}
+      {paymentModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => {
+              setPaymentModalOpen(false);
+              setEditingPaymentId(null);
+            }}
+          />
+          <motion.div 
+            initial={{ y: 200, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 relative z-10 shadow-2xl overflow-hidden"
+          >
+            <div className="mb-6 text-center">
+              <h3 className="text-lg font-bold text-gray-900">
+                {editingPaymentId 
+                  ? (edited.type === 'income' ? 'Editar Cobro' : 'Editar Pago')
+                  : (edited.type === 'income' ? 'Registrar Cobro' : 'Registrar Pago')
+                }
+              </h3>
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+                {edited.concept}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Importe</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-300">€</span>
+                  <input 
+                    type="number" 
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-gray-50 border-none rounded-2xl pl-8 pr-4 py-3.5 text-base font-bold outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all font-numeric"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Método</label>
+                <div className="relative">
+                  <select 
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full appearance-none bg-gray-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all cursor-pointer"
+                  >
+                    {['Efectivo', 'Bizum', 'Transferencia', 'Tarjeta', 'Otro'].map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Nota (opcional)</label>
+                <input 
+                  type="text" 
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  placeholder="Ej: Pago adelantado"
+                  className="w-full bg-gray-50 border-none rounded-2xl px-4 py-3.5 text-sm font-medium outline-none shadow-inner focus:ring-4 ring-primary/5 transition-all placeholder:text-gray-300"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-10">
+              <button 
+                onClick={() => {
+                  setPaymentModalOpen(false);
+                  setEditingPaymentId(null);
+                }}
+                className="flex-1 py-4 text-sm font-bold text-gray-400 hover:bg-gray-50 rounded-2xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleSavePayment}
+                className="flex-2 py-4 bg-brand-gradient text-white text-sm font-bold rounded-2xl shadow-lg shadow-primary/20"
+              >
+                Guardar {edited.type === 'income' ? 'cobro' : 'pago'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1882,9 +2729,24 @@ export default function App() {
   };
 
   const toggleMovementStatus = (id: string) => {
-    setMovements(prev => prev.map(m => 
-      m.id === id ? { ...m, status: m.status === 'settled' ? 'pending' : 'settled' } : m
-    ));
+    setMovements(prev => prev.map(m => {
+      if (m.id === id) {
+        const isSettled = m.status === 'settled';
+        const newStatus = isSettled ? 'pending' : 'settled';
+        const totalAmount = Math.abs(m.amount);
+        const newPaidAmount = newStatus === 'settled' ? totalAmount : 0;
+        
+        return { 
+          ...m, 
+          status: newStatus, 
+          paidAmount: newPaidAmount,
+          // If we mark as settled via toggle, we might want to clear previous partial payments?
+          // Actually, let's keep it simple: if toggled to settled, we set paidAmount to total.
+          // If toggled to pending, we set paidAmount to 0 for consistency with the UI's simple toggle.
+        };
+      }
+      return m;
+    }));
   };
 
   const currentMovement = movements.find(m => m.id === selectedMovementId) || movements[0];
@@ -1908,6 +2770,10 @@ export default function App() {
   const handleSaveMovement = (updated: Movement) => {
     setMovements(prev => prev.map(m => m.id === updated.id ? updated : m));
     showToast('Cambios guardados');
+  };
+
+  const updateMovement = (updated: Movement) => {
+    setMovements(prev => prev.map(m => m.id === updated.id ? updated : m));
   };
 
   const handleDeleteMovement = (id: string) => {
@@ -1937,6 +2803,7 @@ export default function App() {
           setScreen={setScreen} 
           movements={movements} 
           onToggleStatus={toggleMovementStatus} 
+          onUpdateMovement={updateMovement}
           setSelectedMovementId={setSelectedMovementId}
           selectedMonth={selectedMonth}
           setSelectedMonth={setSelectedMonth}
@@ -1981,6 +2848,7 @@ export default function App() {
           setScreen={setScreen} 
           movements={movements} 
           onToggleStatus={toggleMovementStatus} 
+          onUpdateMovement={updateMovement}
           setSelectedMovementId={setSelectedMovementId}
           selectedMonth={selectedMonth}
           setSelectedMonth={setSelectedMonth}
