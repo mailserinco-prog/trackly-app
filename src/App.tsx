@@ -96,6 +96,19 @@ const formatCurrency = (amount: number, currency: string = 'EUR', language: stri
   }).format(amount);
 };
 
+const monthMap: Record<string, number> = {
+  'Ene': 0, 'Feb': 1, 'Mar': 2, 'Abr': 3, 'May': 4, 'Jun': 5,
+  'Jul': 6, 'Ago': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dic': 11,
+  'Jan': 0, 'Apr': 3, 'Aug': 7, 'Dec': 12,
+  'Feb.': 1, 'Mar.': 2, 'May.': 4, 'Jun.': 5, 'Jul.': 6, 'Sep.': 8, 'Oct.': 9, 'Nov.': 10
+};
+
+const getMonthIndexFromDate = (dateStr: string) => {
+  const parts = dateStr.split(' ');
+  const monthAbbr = parts[parts.length - 1];
+  return monthMap[monthAbbr] ?? 0;
+};
+
 const getMovementPaidAmount = (movement: Movement) => {
   if (movement.paidAmount !== undefined) return movement.paidAmount;
   return movement.status === 'settled' ? Math.abs(movement.amount) : 0;
@@ -408,10 +421,7 @@ const StatsScreen = ({
   
   // Helper to filter movements by month/year
   const getMovementsFor = (mIdx: number, year: number) => {
-    // In a real app we'd use a robust date check, for now we keep the concept matching
-    const monthNamesES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const monthName = monthNamesES[mIdx];
-    return movements.filter(m => m.date.includes(monthName)); 
+    return movements.filter(m => getMonthIndexFromDate(m.date) === mIdx);
   };
 
   const currentMovements = getMovementsFor(selectedMonth, selectedYear);
@@ -916,14 +926,14 @@ const MovementsScreen = ({
               className="flex-1 bg-brand-gradient text-white py-4 rounded-[1.25rem] font-bold flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
             >
               <PlusCircle size={20} />
-              <span className="text-sm">{t('movement.income')}</span>
+              <span className="text-sm">{t('common.income')}</span>
             </button>
             <button 
               onClick={() => onAddMovement('expense')}
               className="flex-1 bg-secondary text-white py-4 rounded-[1.25rem] font-bold flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 hover:scale-[1.02] active:scale-95 transition-all"
             >
               <MinusCircle size={20} />
-              <span className="text-sm">{t('movement.expense')}</span>
+              <span className="text-sm">{t('common.expense')}</span>
             </button>
           </div>
 
@@ -1062,7 +1072,7 @@ const MovementsScreen = ({
                             {item.payments.map(p => (
                               <div key={p.id} className="flex justify-between items-center text-[10px] bg-white p-2 rounded-lg border border-gray-50 shadow-sm group/pay">
                                 <div>
-                                  <p className="font-bold text-gray-700">{formatCurrency(p.amount, item.currency || currency, language)} • {p.method}</p>
+                                  <p className="font-bold text-gray-700">{formatCurrency(p.amount, item.currency || currency, language)} • {p.method === 'Efectivo' ? t('payment.cash') : (p.method === 'Tarjeta' ? t('payment.card') : p.method)}</p>
                                   <p className="text-gray-400">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1114,7 +1124,7 @@ const MovementsScreen = ({
                             {item.payments.map(p => (
                               <div key={p.id} className="flex justify-between items-center text-[10px] bg-white p-2 rounded-lg border border-gray-50 shadow-sm group/pay">
                                 <div>
-                                  <p className="font-bold text-gray-700">{formatCurrency(p.amount, item.currency || currency, language)} • {p.method}</p>
+                                  <p className="font-bold text-gray-700">{formatCurrency(p.amount, item.currency || currency, language)} • {p.method === 'Efectivo' ? t('payment.cash') : (p.method === 'Tarjeta' ? t('payment.card') : p.method)}</p>
                                   <p className="text-gray-400">{p.date}{p.note ? ` • ${p.note}` : ''}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1593,16 +1603,28 @@ const ReceiptPreviewScreen = ({
 
       // Date Formatting Utility for PDF
       const formatFormalDate = (dateStr: string) => {
-        // Simple cleanup: removes day-of-week abbreviations like "Ma. "
-        let cleaned = dateStr.replace(/^[A-Za-z]{2}\.\s+/, "");
-        // Map months to full names in Spanish
-        const monthsMap: Record<string, string> = {
-          'Ene': 'Enero', 'Feb': 'Febrero', 'Mar': 'Marzo', 'Abr': 'Abril',
-          'May': 'Mayo', 'Jun': 'Junio', 'Jul': 'Julio', 'Ago': 'Agosto',
-          'Sep': 'Septiembre', 'Oct': 'Octubre', 'Nov': 'Noviembre', 'Dic': 'Diciembre'
+        // Simple cleanup: removes day-of-week abbreviations
+        let cleaned = dateStr.replace(/^[A-Z][a-z]\.?\s+/, "");
+        
+        const monthsKeys: Record<string, string> = {
+          'Ene': 'jan', 'Feb': 'feb', 'Mar': 'mar', 'Abr': 'apr',
+          'May': 'may', 'Jun': 'jun', 'Jul': 'jul', 'Ago': 'aug',
+          'Sep': 'sep', 'Oct': 'oct', 'Nov': 'nov', 'Dic': 'dec',
+          'Jan': 'jan', 'Feb.': 'feb', 'Mar.': 'mar', 'Apr.': 'apr',
+          'May.': 'may', 'Jun.': 'jun', 'Jul.': 'jul', 'Aug.': 'aug',
+          'Sep.': 'sep', 'Oct.': 'oct', 'Nov.': 'nov', 'Dec.': 'dec'
         };
-        Object.keys(monthsMap).forEach(m => {
-          if (cleaned.includes(m)) cleaned = cleaned.replace(m, monthsMap[m]);
+
+        const monthsMapFull: Record<string, string> = {
+          'jan': t('monthsFull.jan'), 'feb': t('monthsFull.feb'), 'mar': t('monthsFull.mar'), 'apr': t('monthsFull.apr'),
+          'may': t('monthsFull.may'), 'jun': t('monthsFull.jun'), 'jul': t('monthsFull.jul'), 'aug': t('monthsFull.aug'),
+          'sep': t('monthsFull.sep'), 'oct': t('monthsFull.oct'), 'nov': t('monthsFull.nov'), 'dec': t('monthsFull.dec')
+        };
+
+        Object.keys(monthsKeys).forEach(m => {
+          if (cleaned.includes(m)) {
+            cleaned = cleaned.replace(m, monthsMapFull[monthsKeys[m]]);
+          }
         });
         return cleaned + " 2026"; // App context year
       };
@@ -2185,8 +2207,8 @@ const ProfileScreen = ({
                       onChange={(e) => changeLanguage(e.target.value)}
                       className="w-full appearance-none bg-white border border-gray-100 rounded-2xl px-4 py-3.5 text-[11px] font-bold text-gray-900 focus:ring-4 ring-primary/5 outline-none transition-all"
                     >
-                      <option value="es">Español</option>
-                      <option value="en">English</option>
+                      <option value="es">{t('profile.spanish')}</option>
+                      <option value="en">{t('profile.english')}</option>
                     </select>
                     <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                   </div>
@@ -2548,12 +2570,12 @@ const EditMovementScreen = ({
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 opacity-70">Notas</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 opacity-70">{t('movement.notesLabel')}</label>
               <textarea 
                 value={edited.notes || ''}
                 onChange={(e) => setEdited(prev => ({ ...prev, notes: e.target.value }))}
                 className="w-full bg-gray-50 border-none rounded-[1.5rem] px-6 py-5 text-sm font-medium text-gray-600 focus:bg-white focus:ring-4 ring-primary/5 outline-none transition-all shadow-inner min-h-[100px]"
-                placeholder="Añade notas aquí..."
+                placeholder={t('payment.notePlaceholder')}
               />
             </div>
           </div>
@@ -2563,20 +2585,20 @@ const EditMovementScreen = ({
               <div className="p-2 bg-white rounded-xl shadow-sm text-primary">
                 <RefreshCw size={18} />
               </div>
-              <h3 className="font-bold text-sm text-gray-800">Estado del Movimiento</h3>
+              <h3 className="font-bold text-sm text-gray-800">{t('common.status')}</h3>
             </div>
             <div className="flex bg-white/50 p-2 rounded-2xl border border-gray-100 shadow-inner">
               <button 
                 onClick={() => setEdited(prev => ({ ...prev, status: 'settled' }))}
                 className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase transition-all ${edited.status === 'settled' ? 'bg-brand-gradient text-white shadow-lg shadow-primary/20' : 'text-gray-300'}`}
               >
-                {edited.type === 'income' ? 'Cobrado' : 'Pagado'}
+                {edited.type === 'income' ? t('status.collected') : t('status.paid')}
               </button>
               <button 
                 onClick={() => setEdited(prev => ({ ...prev, status: 'pending' }))}
                 className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase transition-all ${edited.status === 'pending' ? 'bg-secondary text-white shadow-lg shadow-secondary/20' : 'text-gray-300'}`}
               >
-                Pendiente
+                {t('status.pending')}
               </button>
             </div>
           </section>
@@ -2588,7 +2610,7 @@ const EditMovementScreen = ({
                 <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
                   <CreditCard size={18} />
                 </div>
-                <h3 className="font-bold text-sm text-gray-800">Desglose de Pagos</h3>
+                <h3 className="font-bold text-sm text-gray-800">{t('payment.history')}</h3>
               </div>
               <div className={`px-3 py-1 rounded-full text-[8px] font-bold uppercase tracking-widest ${
                 isMovementFullyCompleted(edited) 
@@ -2598,31 +2620,31 @@ const EditMovementScreen = ({
                     : 'bg-gray-100 text-gray-400'
               }`}>
                 {isMovementFullyCompleted(edited) 
-                  ? (edited.type === 'income' ? 'Cobrado' : 'Pagado')
-                  : isMovementPartiallyCompleted(edited) ? 'Parcial' : 'Pendiente'
+                  ? (edited.type === 'income' ? t('status.collected') : t('status.paid'))
+                  : isMovementPartiallyCompleted(edited) ? t('status.partial') : t('status.pending')
                 }
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-gray-50 p-3 rounded-2xl text-center">
-                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Total</p>
-                <p className="text-sm font-bold text-gray-700">{Math.abs(edited.amount)}€</p>
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t('common.total')}</p>
+                <p className="text-sm font-bold text-gray-700">{formatCurrency(Math.abs(edited.amount), edited.currency || currency, language)}</p>
               </div>
               <div className="bg-green-50 p-3 rounded-2xl text-center">
-                <p className="text-[9px] font-bold text-green-400 uppercase tracking-wider mb-1">{edited.type === 'income' ? 'Cobrado' : 'Pagado'}</p>
-                <p className="text-sm font-bold text-green-700">{getMovementPaidAmount(edited)}€</p>
+                <p className="text-[9px] font-bold text-green-400 uppercase tracking-wider mb-1">{edited.type === 'income' ? t('status.collected') : t('status.paid')}</p>
+                <p className="text-sm font-bold text-green-700">{formatCurrency(getMovementPaidAmount(edited), edited.currency || currency, language)}</p>
               </div>
               <div className="bg-amber-50 p-3 rounded-2xl text-center">
-                <p className="text-[9px] font-bold text-amber-500 uppercase tracking-wider mb-1">Pendiente</p>
-                <p className="text-sm font-bold text-amber-700">{getMovementPendingAmount(edited)}€</p>
+                <p className="text-[9px] font-bold text-amber-500 uppercase tracking-wider mb-1">{t('status.pending')}</p>
+                <p className="text-sm font-bold text-amber-700">{formatCurrency(getMovementPendingAmount(edited), edited.currency || currency, language)}</p>
               </div>
             </div>
 
             {getMovementPaidAmount(edited) > 0 && (
               <div className="space-y-2">
                 <div className="flex justify-between text-[10px] font-bold px-1">
-                  <span className="text-gray-400">Progreso</span>
+                  <span className="text-gray-400">{t('summary.growth')}</span>
                   <span className="text-primary">{Math.round(getMovementProgress(edited))}%</span>
                 </div>
                 <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -2794,8 +2816,8 @@ const EditMovementScreen = ({
             <div className="mb-6 text-center">
               <h3 className="text-lg font-bold text-gray-900">
                 {editingPaymentId 
-                  ? (edited.type === 'income' ? 'Editar Cobro' : 'Editar Pago')
-                  : (edited.type === 'income' ? 'Registrar Cobro' : 'Registrar Pago')
+                  ? (edited.type === 'income' ? t('payment.editIncome') : t('payment.editExpense'))
+                  : (edited.type === 'income' ? t('payment.registerIncome') : t('payment.registerExpense'))
                 }
               </h3>
               <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
@@ -2873,17 +2895,18 @@ const EditMovementScreen = ({
 // --- Main App ---
 
 export default function App() {
+  const { t, i18n } = useTranslation();
   const [screen, setScreen] = React.useState<AppScreen>('onboarding');
   const [selectedMovementId, setSelectedMovementId] = React.useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = React.useState(4); // Mayo
-  const [selectedYear, setSelectedYear] = React.useState(2026);
+  const [selectedMonth, setSelectedMonth] = React.useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = React.useState(new Date().getFullYear());
   const [toast, setToast] = React.useState<string | null>(null);
   
   const [movements, setMovements] = React.useState<Movement[]>([
-    { id: '3', concept: 'Jardín Casa López', amount: 120, type: 'income', status: 'settled', date: 'Ma. 12 May', notes: 'Mantenimiento mensual: Corte de césped, poda de setos y abono trimestral.' },
-    { id: '4', concept: 'Jardín Casa Miguel', amount: 90, type: 'income', status: 'pending', date: 'Lu. 10 May', notes: 'Limpieza general de jardín delantero.' },
-    { id: '5', concept: 'Combustible Furgón', amount: -45, type: 'expense', status: 'settled', date: 'Vi. 08 May', notes: 'Gasolinera Repsol.' },
-    { id: '6', concept: 'Materiales Almacén', amount: -180, type: 'expense', status: 'pending', date: 'Ma. 05 May', notes: 'Compra de fertilizantes y semillas.' },
+    { id: '3', concept: 'Jardín Casa López', amount: 120, type: 'income', status: 'settled', date: 'Tu. 12 May', notes: 'Mantenimiento mensual: Corte de césped, poda de setos y abono trimestral.' },
+    { id: '4', concept: 'Jardín Casa Miguel', amount: 90, type: 'income', status: 'pending', date: 'Mo. 10 May', notes: 'Limpieza general de jardín delantero.' },
+    { id: '5', concept: 'Combustible Furgón', amount: -45, type: 'expense', status: 'settled', date: 'Fr. 08 May', notes: 'Gasolinera Repsol.' },
+    { id: '6', concept: 'Materiales Almacén', amount: -180, type: 'expense', status: 'pending', date: 'Tu. 05 May', notes: 'Compra de fertilizantes y semillas.' },
     { id: '7', concept: 'Reparación Piscina', amount: 350, type: 'income', status: 'settled', date: 'Sa. 02 May', notes: 'Reparación de fuga en sistema de filtrado.' },
   ]);
 
@@ -2893,15 +2916,15 @@ export default function App() {
     return {
       fullName: 'Alejandro Lopez',
       email: 'mail.serinco@gmail.com',
-      registrationDate: '12 de Abril, 2026',
-      jobType: 'Jardinería',
+      registrationDate: '12 Apr, 2026',
+      jobType: 'GARDENING',
       businessName: 'López Jardines',
       employmentType: 'Autónomo',
       autoBackup: true,
-      backupFrequency: 'Mensual',
+      backupFrequency: 'Monthly',
       toolInterest: true,
       mgmtInterest: false,
-      lastAccess: 'Hoy',
+      lastAccess: 'Today',
       profilePic: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCnregE4Cc8vUrpeFz8mP7GFvDStonKJ8WgdDxyQrbDdUXNKS1COUpMwS58TzEqUtNggN77w7O89UoEmNkhY9yTbj3PgGpK8Ly-6HQW-OCE0enD2uDly124zmuImGiuXo9uhb31Ive731XeOrrhp7ZM6LS6sULohIxwFB_o7cU05eHoFogulkPnrHXLE8sDP7RQh_Pjvh-rR_iUhEht1q5u7LwGywhMFn2_4nhNOkNZt6eSn3Ek1IavczPTKaS0-cGf5ahnAVOV2sTZ',
       language: savedLanguage,
       currency: savedCurrency
@@ -2937,14 +2960,14 @@ export default function App() {
   const currentMovement = movements.find(m => m.id === selectedMovementId) || movements[0];
 
   const handleAddMovement = (type: 'income' | 'expense') => {
-    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const monthsKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
     const newMovement: Movement = {
       id: Math.random().toString(36).substr(2, 9),
-      concept: type === 'income' ? 'Nuevo Ingreso' : 'Nuevo Gasto',
+      concept: type === 'income' ? t('movement.newIncome') : t('movement.newExpense'),
       amount: type === 'income' ? 100 : -100,
       type: type,
       status: 'pending',
-      date: `Ho. ${new Date().getDate()} ${months[selectedMonth]}`,
+      date: `${new Date().toLocaleDateString(i18n.language === 'es' ? 'es-ES' : 'en-US', { weekday: 'short' }).slice(0, 2)}. ${new Date().getDate()} ${t(`months.${monthsKeys[selectedMonth]}`)}`,
       notes: ''
     };
     setMovements(prev => [newMovement, ...prev]);
