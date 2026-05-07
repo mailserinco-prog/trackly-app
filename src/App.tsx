@@ -1985,7 +1985,6 @@ const ProfileScreen = ({
   const changeLanguage = (lang: string) => {
     i18n.changeLanguage(lang);
     setProfile(p => ({ ...p, language: lang }));
-    localStorage.setItem('trackly_language', lang);
   };
 
   return (
@@ -2894,42 +2893,83 @@ const EditMovementScreen = ({
 
 // --- Main App ---
 
+const STORAGE_KEY = 'trackly_data';
+
 export default function App() {
   const { t, i18n } = useTranslation();
-  const [screen, setScreen] = React.useState<AppScreen>('onboarding');
-  const [selectedMovementId, setSelectedMovementId] = React.useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = React.useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = React.useState(new Date().getFullYear());
-  const [toast, setToast] = React.useState<string | null>(null);
   
-  const [movements, setMovements] = React.useState<Movement[]>([
+  // Initial default values
+  const defaultMovements = [
     { id: '3', concept: 'Jardín Casa López', amount: 120, type: 'income', status: 'settled', date: 'Tu. 12 May', notes: 'Mantenimiento mensual: Corte de césped, poda de setos y abono trimestral.' },
     { id: '4', concept: 'Jardín Casa Miguel', amount: 90, type: 'income', status: 'pending', date: 'Mo. 10 May', notes: 'Limpieza general de jardín delantero.' },
     { id: '5', concept: 'Combustible Furgón', amount: -45, type: 'expense', status: 'settled', date: 'Fr. 08 May', notes: 'Gasolinera Repsol.' },
     { id: '6', concept: 'Materiales Almacén', amount: -180, type: 'expense', status: 'pending', date: 'Tu. 05 May', notes: 'Compra de fertilizantes y semillas.' },
     { id: '7', concept: 'Reparación Piscina', amount: 350, type: 'income', status: 'settled', date: 'Sa. 02 May', notes: 'Reparación de fuga en sistema de filtrado.' },
-  ]);
+  ];
 
-  const [profile, setProfile] = React.useState<ProfileData>(() => {
-    const savedLanguage = localStorage.getItem('trackly_language') || 'es';
-    const savedCurrency = localStorage.getItem('trackly_currency') || 'EUR';
-    return {
-      fullName: 'Alejandro Lopez',
-      email: 'mail.serinco@gmail.com',
-      registrationDate: '12 Apr, 2026',
-      jobType: 'GARDENING',
-      businessName: 'López Jardines',
-      employmentType: 'Autónomo',
-      autoBackup: true,
-      backupFrequency: 'Monthly',
-      toolInterest: true,
-      mgmtInterest: false,
-      lastAccess: 'Today',
-      profilePic: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCnregE4Cc8vUrpeFz8mP7GFvDStonKJ8WgdDxyQrbDdUXNKS1COUpMwS58TzEqUtNggN77w7O89UoEmNkhY9yTbj3PgGpK8Ly-6HQW-OCE0enD2uDly124zmuImGiuXo9uhb31Ive731XeOrrhp7ZM6LS6sULohIxwFB_o7cU05eHoFogulkPnrHXLE8sDP7RQh_Pjvh-rR_iUhEht1q5u7LwGywhMFn2_4nhNOkNZt6eSn3Ek1IavczPTKaS0-cGf5ahnAVOV2sTZ',
-      language: savedLanguage,
-      currency: savedCurrency
-    };
+  const getDefaultProfile = () => ({
+    fullName: 'Alejandro Lopez',
+    email: 'mail.serinco@gmail.com',
+    registrationDate: '12 Apr, 2026',
+    jobType: 'GARDENING',
+    businessName: 'López Jardines',
+    employmentType: 'Autónomo' as const,
+    autoBackup: true,
+    backupFrequency: 'Monthly',
+    toolInterest: true,
+    mgmtInterest: false,
+    lastAccess: 'Today',
+    profilePic: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCnregE4Cc8vUrpeFz8mP7GFvDStonKJ8WgdDxyQrbDdUXNKS1COUpMwS58TzEqUtNggN77w7O89UoEmNkhY9yTbj3PgGpK8Ly-6HQW-OCE0enD2uDly124zmuImGiuXo9uhb31Ive731XeOrrhp7ZM6LS6sULohIxwFB_o7cU05eHoFogulkPnrHXLE8sDP7RQh_Pjvh-rR_iUhEht1q5u7LwGywhMFn2_4nhNOkNZt6eSn3Ek1IavczPTKaS0-cGf5ahnAVOV2sTZ',
+    language: 'es',
+    currency: 'EUR'
   });
+
+  // State initialization with localStorage check
+  const [isInitialized, setIsInitialized] = React.useState(false);
+  const [screen, setScreen] = React.useState<AppScreen>('onboarding');
+  const [selectedMovementId, setSelectedMovementId] = React.useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = React.useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = React.useState(new Date().getFullYear());
+  const [toast, setToast] = React.useState<string | null>(null);
+  const [movements, setMovements] = React.useState<Movement[]>(defaultMovements);
+  const [profile, setProfile] = React.useState<ProfileData>(getDefaultProfile());
+
+  // Load from localStorage on mount
+  React.useEffect(() => {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        if (parsed.movements) setMovements(parsed.movements);
+        if (parsed.profile) {
+          setProfile(parsed.profile);
+          if (parsed.profile.language) {
+            i18n.changeLanguage(parsed.profile.language);
+          }
+        }
+        if (parsed.selectedMonth !== undefined) setSelectedMonth(parsed.selectedMonth);
+        if (parsed.selectedYear !== undefined) setSelectedYear(parsed.selectedYear);
+        if (parsed.hasOnboarded) setScreen('movements');
+      } catch (e) {
+        console.error("Error loading Trackly data:", e);
+      }
+    }
+    setIsInitialized(true);
+  }, [i18n]);
+
+  // Save to localStorage when state changes
+  React.useEffect(() => {
+    if (isInitialized) {
+      const dataToSave = {
+        movements,
+        profile,
+        selectedMonth,
+        selectedYear,
+        hasOnboarded: screen !== 'onboarding'
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+    }
+  }, [movements, profile, selectedMonth, selectedYear, screen, isInitialized]);
 
   const showToast = (msg: string) => {
     setToast(msg);
