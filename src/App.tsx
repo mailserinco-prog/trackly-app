@@ -6,7 +6,7 @@
 import React from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import { tracklyLogoHorizontalBase64 } from "./assets/tracklyLogoBase64";
 import { tracklyLogoSquareBase64 } from "./assets/tracklyLogoSquareBase64";
 import { 
@@ -34,7 +34,7 @@ import {
   Trash2,
   RefreshCw,
   ChevronDown,
-  File,
+  File as FileIcon,
   CreditCard,
 } from "lucide-react";
 
@@ -1588,7 +1588,7 @@ const ReceiptPreviewScreen = ({
 }) => {
   const { t } = useTranslation();
   
-  const generatePDF = () => {
+  const generateReceiptPdfBlob = (): Blob => {
     const doc = new jsPDF({
       orientation: 'p',
       unit: 'mm',
@@ -1769,32 +1769,40 @@ const ReceiptPreviewScreen = ({
     doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
     doc.text(t('receipt.generatedWith'), 105, 285, { align: "center" });
 
-    return doc;
+    return doc.output('blob');
+  };
+
+  const getFileName = () => {
+    const safeDate = movement.date.replace(/[^a-z0-9]/gi, '_');
+    const prefix = t('receipt.filenamePrefix');
+    return `${prefix}-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${safeDate}.pdf`;
   };
 
   const downloadPDF = () => {
     try {
-      const doc = generatePDF();
-      const safeDate = movement.date.replace(/[^a-z0-9]/gi, '_');
-      const prefix = t('receipt.filenamePrefix');
-      const fileName = `${prefix}-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${safeDate}.pdf`;
-      doc.save(fileName);
+      const blob = generateReceiptPdfBlob();
+      const fileName = getFileName();
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
       alert(t('receipt.downloaded'));
     } catch (error) {
-      console.error(error);
+      console.error("Error downloading PDF:", error);
       alert(t('receipt.error'));
     }
   };
 
   const sharePDF = async () => {
     try {
-      const doc = generatePDF();
-      const blob = doc.output('blob');
-      
-      const safeDate = movement.date.replace(/[^a-z0-9]/gi, '_');
-      const prefix = t('receipt.filenamePrefix');
-      const fileName = `${prefix}-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${safeDate}.pdf`;
-      
+      const blob = generateReceiptPdfBlob();
+      const fileName = getFileName();
       const file = new File([blob], fileName, { type: 'application/pdf' });
 
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1804,13 +1812,22 @@ const ReceiptPreviewScreen = ({
           files: [file]
         });
       } else {
-        doc.save(fileName);
+        // Fallback to download
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
         alert(t('receipt.notSupportedShare'));
       }
     } catch (error) {
       // Don't show error if user cancelled
       if (error instanceof Error && error.name === 'AbortError') return;
-      console.error(error);
+      console.error("Error sharing PDF:", error);
       alert(t('receipt.error'));
     }
   };
@@ -2755,7 +2772,7 @@ const EditMovementScreen = ({
                     <img src={att.url} alt={att.name} className="w-10 h-10 rounded-lg object-cover" />
                   ) : (
                     <div className="w-10 h-10 bg-red-50 text-red-500 rounded-lg flex items-center justify-center">
-                      <File size={20} />
+                      <FileIcon size={20} />
                     </div>
                   )}
                   <span className="text-[10px] font-bold text-gray-500 truncate flex-1">{att.name}</span>
