@@ -225,6 +225,9 @@
     "backToDetails": "Back to details",
     "filenamePrefix": "trackly-receipt",
     "downloaded": "Receipt downloaded",
-    "error": "Could not generate the receipt"
+    "error": "Could not generate the receipt",
+    "shareTitle": "Trackly Receipt",
+    "shareText": "Sending you the receipt generated with Trackly.",
+    "notSupportedShare": "Your device does not support direct file sharing. The receipt has been downloaded."
   }
 }

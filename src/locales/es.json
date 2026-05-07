@@ -225,6 +225,9 @@
     "backToDetails": "Volver a detalles",
     "filenamePrefix": "trackly-recibo",
     "downloaded": "Recibo descargado",
-    "error": "No se pudo generar el recibo"
+    "error": "No se pudo generar el recibo",
+    "shareTitle": "Recibo Trackly",
+    "shareText": "Te envío el recibo generado con Trackly.",
+    "notSupportedShare": "Tu dispositivo no permite compartir archivos directamente. El recibo se ha descargado."
   }
 }

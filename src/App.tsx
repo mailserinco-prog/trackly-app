@@ -1588,208 +1588,228 @@ const ReceiptPreviewScreen = ({
 }) => {
   const { t } = useTranslation();
   
-  const downloadPDF = () => {
-    try {
-      const doc = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4'
-      });
+  const generatePDF = () => {
+    const doc = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4'
+    });
 
-      const brandColor = [110, 184, 181]; // Trackly Primary (Teal)
-      const secondaryColor = [243, 82, 102]; // For Expenses or Pending (Red)
-      const textColor = [31, 41, 55]; // Dark Gray/Black
-      const muteColor = [156, 163, 175]; // Light Gray
+    const brandColor = [110, 184, 181]; // Trackly Primary (Teal)
+    const secondaryColor = [243, 82, 102]; // For Expenses or Pending (Red)
+    const textColor = [31, 41, 55]; // Dark Gray/Black
+    const muteColor = [156, 163, 175]; // Light Gray
 
-      // Date Formatting Utility for PDF
-      const formatFormalDate = (dateStr: string) => {
-        // Simple cleanup: removes day-of-week abbreviations
-        let cleaned = dateStr.replace(/^[A-Z][a-z]\.?\s+/, "");
-        
-        const monthsKeys: Record<string, string> = {
-          'Ene': 'jan', 'Feb': 'feb', 'Mar': 'mar', 'Abr': 'apr',
-          'May': 'may', 'Jun': 'jun', 'Jul': 'jul', 'Ago': 'aug',
-          'Sep': 'sep', 'Oct': 'oct', 'Nov': 'nov', 'Dic': 'dec',
-          'Jan': 'jan', 'Feb.': 'feb', 'Mar.': 'mar', 'Apr.': 'apr',
-          'May.': 'may', 'Jun.': 'jun', 'Jul.': 'jul', 'Aug.': 'aug',
-          'Sep.': 'sep', 'Oct.': 'oct', 'Nov.': 'nov', 'Dec.': 'dec'
-        };
-
-        const monthsMapFull: Record<string, string> = {
-          'jan': t('monthsFull.jan'), 'feb': t('monthsFull.feb'), 'mar': t('monthsFull.mar'), 'apr': t('monthsFull.apr'),
-          'may': t('monthsFull.may'), 'jun': t('monthsFull.jun'), 'jul': t('monthsFull.jul'), 'aug': t('monthsFull.aug'),
-          'sep': t('monthsFull.sep'), 'oct': t('monthsFull.oct'), 'nov': t('monthsFull.nov'), 'dec': t('monthsFull.dec')
-        };
-
-        Object.keys(monthsKeys).forEach(m => {
-          if (cleaned.includes(m)) {
-            cleaned = cleaned.replace(m, monthsMapFull[monthsKeys[m]]);
-          }
-        });
-        return cleaned + " 2026"; // App context year
+    // Date Formatting Utility for PDF
+    const formatFormalDate = (dateStr: string) => {
+      // Simple cleanup: removes day-of-week abbreviations
+      let cleaned = dateStr.replace(/^[A-Z][a-z]\.?\s+/, "");
+      
+      const monthsKeys: Record<string, string> = {
+        'Ene': 'jan', 'Feb': 'feb', 'Mar': 'mar', 'Abr': 'apr',
+        'May': 'may', 'Jun': 'jun', 'Jul': 'jul', 'Ago': 'aug',
+        'Sep': 'sep', 'Oct': 'oct', 'Nov': 'nov', 'Dic': 'dec',
+        'Jan': 'jan', 'Feb.': 'feb', 'Mar.': 'mar', 'Apr.': 'apr',
+        'May.': 'may', 'Jun.': 'jun', 'Jul.': 'jul', 'Aug.': 'aug',
+        'Sep.': 'sep', 'Oct.': 'oct', 'Nov.': 'nov', 'Dec.': 'dec'
       };
 
-      // 1. CABECERA
-      // Stylized Logo Text
-      try {
-        // We use the imported Logo as a static asset. 
-        // Note: Using base64 directly ensures it works in all environments (mobile/prod)
-        doc.addImage(tracklyLogoHorizontalBase64, 'PNG', 20, 15, 40, 12);
-      } catch (e) {
-        // Fallback to text if image fails
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(24);
-        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        doc.text("Trackly", 20, 25);
-      }
+      const monthsMapFull: Record<string, string> = {
+        'jan': t('monthsFull.jan'), 'feb': t('monthsFull.feb'), 'mar': t('monthsFull.mar'), 'apr': t('monthsFull.apr'),
+        'may': t('monthsFull.may'), 'jun': t('monthsFull.jun'), 'jul': t('monthsFull.jul'), 'aug': t('monthsFull.aug'),
+        'sep': t('monthsFull.sep'), 'oct': t('monthsFull.oct'), 'nov': t('monthsFull.nov'), 'dec': t('monthsFull.dec')
+      };
 
-      doc.setFontSize(28);
+      Object.keys(monthsKeys).forEach(m => {
+        if (cleaned.includes(m)) {
+          cleaned = cleaned.replace(m, monthsMapFull[monthsKeys[m]]);
+        }
+      });
+      return cleaned + " 2026"; // App context year
+    };
+
+    // 1. CABECERA
+    try {
+      doc.addImage(tracklyLogoHorizontalBase64, 'PNG', 20, 15, 40, 12);
+    } catch (e) {
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-      doc.text(t('receipt.title').toUpperCase(), 105, 50, { align: "center" });
+      doc.setFontSize(24);
+      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      doc.text("Trackly", 20, 25);
+    }
 
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
+    doc.setFontSize(28);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(t('receipt.title').toUpperCase(), 105, 50, { align: "center" });
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
+    doc.text(`#${t('receipt.number')}000${movement.id.slice(0, 5).toUpperCase()}`, 105, 58, { align: "center" });
+    
+    doc.setFontSize(11);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(formatFormalDate(movement.date), 105, 66, { align: "center" });
+
+    doc.setDrawColor(243, 244, 246);
+    doc.line(20, 75, 190, 75);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    doc.text(`${t('receipt.from').toUpperCase()}:`, 20, 90);
+    doc.text(`${t('receipt.to').toUpperCase()}:`, 110, 90);
+
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.setFontSize(12);
+    doc.text(profile.fullName, 20, 98);
+    doc.text(movement.concept, 110, 98);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
+    doc.text(profile.businessName || profile.jobType, 20, 104);
+    doc.text(profile.email, 20, 110);
+    doc.text(t('receipt.clientSub'), 110, 104);
+
+    doc.line(20, 125, 190, 125);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    doc.text(`${t('movement.conceptLabel').toUpperCase()}:`, 20, 140);
+    
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.setFontSize(13);
+    doc.text(movement.concept, 20, 148);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    doc.text(`${t('receipt.detail').toUpperCase()}:`, 20, 160);
+
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const notes = movement.notes || t('movement.noNotes');
+    const splitNotes = doc.splitTextToSize(notes, 160);
+    doc.text(splitNotes, 20, 168);
+
+    doc.line(20, 185, 190, 185);
+
+    const isExpense = movement.type === 'expense';
+    const absAmount = Math.abs(movement.amount);
+    const paidAmount = getMovementPaidAmount(movement);
+    const pendingAmount = getMovementPendingAmount(movement);
+    const isPartial = isMovementPartiallyCompleted(movement);
+    const isCompleted = isMovementFullyCompleted(movement);
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    
+    if (isPartial) {
+      doc.text(t('receipt.breakdown').toUpperCase(), 105, 195, { align: "center" });
+      
+      doc.setFontSize(9);
       doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
-      doc.text(`#${t('receipt.number')}000${movement.id.slice(0, 5).toUpperCase()}`, 105, 58, { align: "center" });
+      doc.text(`${t('common.total')}: ${formatCurrency(absAmount, movement.currency || currency, language)}`, 105, 202, { align: "center" });
       
       doc.setFontSize(11);
-      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-      doc.text(formatFormalDate(movement.date), 105, 66, { align: "center" });
-
-      // Separator
-      doc.setDrawColor(243, 244, 246);
-      doc.line(20, 75, 190, 75);
-
-      // 2. BLOQUE DE DATOS (DE / PARA)
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
       doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      doc.text(`${t('receipt.from').toUpperCase()}:`, 20, 90);
-      doc.text(`${t('receipt.to').toUpperCase()}:`, 110, 90);
-
-      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-      doc.setFontSize(12);
-      doc.text(profile.fullName, 20, 98);
-      doc.text(movement.concept, 110, 98);
-
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
-      doc.text(profile.businessName || profile.jobType, 20, 104);
-      doc.text(profile.email, 20, 110);
-      doc.text(t('receipt.clientSub'), 110, 104);
-
-      // Separator
-      doc.line(20, 125, 190, 125);
-
-      // 3. CONCEPTO & DETALLE
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      doc.text(`${t('movement.conceptLabel').toUpperCase()}:`, 20, 140);
+      doc.text(`${isExpense ? t('status.paid') : t('status.collected')}: ${formatCurrency(paidAmount, movement.currency || currency, language)}`, 105, 210, { align: "center" });
       
-      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-      doc.setFontSize(13);
-      doc.text(movement.concept, 20, 148);
-
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      doc.text(`${t('receipt.detail').toUpperCase()}:`, 20, 160);
-
-      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      const notes = movement.notes || t('movement.noNotes');
-      const splitNotes = doc.splitTextToSize(notes, 160);
-      doc.text(splitNotes, 20, 168);
-
-      // Separator
-      doc.line(20, 185, 190, 185);
-
-      // 4. TOTAL (MUY IMPORTANTE)
-      const isExpense = movement.type === 'expense';
-      const absAmount = Math.abs(movement.amount);
-      const paidAmount = getMovementPaidAmount(movement);
-      const pendingAmount = getMovementPendingAmount(movement);
-      const isPartial = isMovementPartiallyCompleted(movement);
-      const isCompleted = isMovementFullyCompleted(movement);
-      
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-      
-      if (isPartial) {
-        doc.text(t('receipt.breakdown').toUpperCase(), 105, 195, { align: "center" });
-        
-        doc.setFontSize(9);
-        doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
-        doc.text(`${t('common.total')}: ${formatCurrency(absAmount, movement.currency || currency, language)}`, 105, 202, { align: "center" });
-        
-        doc.setFontSize(11);
-        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        doc.text(`${isExpense ? t('status.paid') : t('status.collected')}: ${formatCurrency(paidAmount, movement.currency || currency, language)}`, 105, 210, { align: "center" });
-        
-        doc.setFontSize(14);
-        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        doc.text(`${t('status.pending').toUpperCase()}: ${formatCurrency(pendingAmount, movement.currency || currency, language)}`, 105, 220, { align: "center" });
-      } else {
-        doc.text(t('common.total').toUpperCase(), 105, 205, { align: "center" });
-        doc.setFontSize(42);
-        if (isExpense) {
-          doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        } else {
-          doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        }
-        doc.text(`${formatCurrency(absAmount, movement.currency || currency, language)}`, 105, 222, { align: "center" });
-      }
-
-      // 5. ESTADO
       doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      const stateLabel = t('common.status');
-      if (isCompleted) {
-        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        doc.text(`${stateLabel}: ${isExpense ? t('status.paid').toUpperCase() : t('status.collected').toUpperCase()}`, 105, 235, { align: "center" });
-      } else if (isPartial) {
+      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      doc.text(`${t('status.pending').toUpperCase()}: ${formatCurrency(pendingAmount, movement.currency || currency, language)}`, 105, 220, { align: "center" });
+    } else {
+      doc.text(t('common.total').toUpperCase(), 105, 205, { align: "center" });
+      doc.setFontSize(42);
+      if (isExpense) {
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        doc.text(`${stateLabel}: ${t('status.partial').toUpperCase()}`, 105, 235, { align: "center" });
       } else {
-        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        doc.text(`${stateLabel}: ${t('status.pending').toUpperCase()}`, 105, 235, { align: "center" });
-      }
-
-      // 6. HISTORIAL DE PAGOS (Si existen)
-      if (movement.payments && movement.payments.length > 0) {
-        doc.setFontSize(10);
         doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
-        doc.text(`${isExpense ? t('movement.paymentsDone') : t('movement.incomesReceived')}:`, 20, 250);
-        
-        doc.setFontSize(8);
-        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-        let currentY = 258;
-        movement.payments.forEach((p) => {
-          if (currentY > 275) return; // Prevent overflow for now
-          const paymentLine = `${p.date} - ${p.method === 'Efectivo' ? t('payment.cash') : t('payment.card')}: ${formatCurrency(p.amount, movement.currency || currency, language)} ${p.note ? `(${p.note})` : ''}`;
-          doc.text(paymentLine, 20, currentY);
-          currentY += 5;
-        });
       }
+      doc.text(`${formatCurrency(absAmount, movement.currency || currency, language)}`, 105, 222, { align: "center" });
+    }
 
-      // 9. PIE
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    const stateLabel = t('common.status');
+    if (isCompleted) {
+      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      doc.text(`${stateLabel}: ${isExpense ? t('status.paid').toUpperCase() : t('status.collected').toUpperCase()}`, 105, 235, { align: "center" });
+    } else if (isPartial) {
+      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      doc.text(`${stateLabel}: ${t('status.partial').toUpperCase()}`, 105, 235, { align: "center" });
+    } else {
+      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      doc.text(`${stateLabel}: ${t('status.pending').toUpperCase()}`, 105, 235, { align: "center" });
+    }
+
+    if (movement.payments && movement.payments.length > 0) {
+      doc.setFontSize(10);
+      doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+      doc.text(`${isExpense ? t('movement.paymentsDone') : t('movement.incomesReceived')}:`, 20, 250);
+      
       doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
-      doc.text(t('receipt.generatedWith'), 105, 285, { align: "center" });
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      let currentY = 258;
+      movement.payments.forEach((p) => {
+        if (currentY > 275) return; 
+        const paymentLine = `${p.date} - ${p.method === 'Efectivo' ? t('payment.cash') : t('payment.card')}: ${formatCurrency(p.amount, movement.currency || currency, language)} ${p.note ? `(${p.note})` : ''}`;
+        doc.text(paymentLine, 20, currentY);
+        currentY += 5;
+      });
+    }
 
-      // Filename
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(muteColor[0], muteColor[1], muteColor[2]);
+    doc.text(t('receipt.generatedWith'), 105, 285, { align: "center" });
+
+    return doc;
+  };
+
+  const downloadPDF = () => {
+    try {
+      const doc = generatePDF();
       const safeDate = movement.date.replace(/[^a-z0-9]/gi, '_');
       const prefix = t('receipt.filenamePrefix');
       const fileName = `${prefix}-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${safeDate}.pdf`;
       doc.save(fileName);
       alert(t('receipt.downloaded'));
     } catch (error) {
+      console.error(error);
+      alert(t('receipt.error'));
+    }
+  };
+
+  const sharePDF = async () => {
+    try {
+      const doc = generatePDF();
+      const blob = doc.output('blob');
+      
+      const safeDate = movement.date.replace(/[^a-z0-9]/gi, '_');
+      const prefix = t('receipt.filenamePrefix');
+      const fileName = `${prefix}-${movement.concept.toLowerCase().replace(/\s+/g, '-')}-${safeDate}.pdf`;
+      
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: t('receipt.shareTitle'),
+          text: t('receipt.shareText'),
+          files: [file]
+        });
+      } else {
+        doc.save(fileName);
+        alert(t('receipt.notSupportedShare'));
+      }
+    } catch (error) {
+      // Don't show error if user cancelled
+      if (error instanceof Error && error.name === 'AbortError') return;
       console.error(error);
       alert(t('receipt.error'));
     }
@@ -1929,7 +1949,10 @@ const ReceiptPreviewScreen = ({
           >
             {t('receipt.downloadPDF')}
           </button>
-          <button className="w-full py-5 border-2 border-primary/20 text-primary rounded-[1.75rem] text-base font-bold bg-white hover:bg-gray-50 active:scale-95 transition-all font-sans">
+          <button 
+            onClick={sharePDF}
+            className="w-full py-5 border-2 border-primary/20 text-primary rounded-[1.75rem] text-base font-bold bg-white hover:bg-gray-50 active:scale-95 transition-all font-sans"
+          >
             {t('common.share')}
           </button>
           <div className="flex justify-center pt-4">
